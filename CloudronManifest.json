@@ -1,0 +1,49 @@
+{
+  "id": "io.github.orcvole.docling",
+  "title": "Docling Serve",
+  "author": "OrcVole",
+  "tagline": "Convert documents to clean Markdown and JSON (Docling)",
+  "description": "file://DESCRIPTION.md",
+  "changelog": "file://CHANGELOG.md",
+  "icon": "file://logo.png",
+  "version": "1.0.0",
+  "upstreamVersion": "1.25.0",
+  "healthCheckPath": "/health",
+  "httpPort": 5001,
+  "addons": {
+    "localstorage": {},
+    "proxyAuth": {
+      "path": "/ui"
+    }
+  },
+  "memoryLimit": 4294967296,
+  "configurePath": "/ui",
+  "optionalSso": true,
+  "postInstallMessage": "file://POSTINSTALL.md",
+  "checklist": {
+    "apikey": {
+      "message": "Get your API key: open a Terminal for this app (the `>_` button) and run `cat /app/data/.secrets/keys.env`. Send it as the header `X-Api-Key: <key>` to the `/v1/convert/*` endpoints."
+    },
+    "ui": {
+      "message": "Open the demonstrator UI at `/ui` (behind Cloudron login) to convert a document in the browser. The OpenAPI docs are at `/docs`."
+    }
+  },
+  "tags": [
+    "ai",
+    "documents",
+    "ocr",
+    "rag",
+    "markdown"
+  ],
+  "mediaLinks": [
+    "https://raw.githubusercontent.com/OrcVole/docling-cloudron/main/screenshots/ui.png"
+  ],
+  "website": "https://github.com/OrcVole/docling-cloudron",
+  "documentationUrl": "https://github.com/OrcVole/docling-cloudron",
+  "contactEmail": "OrcVole@users.noreply.github.com",
+  "packagerName": "OrcVole",
+  "packagerUrl": "https://github.com/OrcVole/docling-cloudron",
+  "manifestVersion": 2,
+  "minBoxVersion": "9.1.0",
+  "iconUrl": "https://raw.githubusercontent.com/OrcVole/docling-cloudron/main/logo.png"
+}
