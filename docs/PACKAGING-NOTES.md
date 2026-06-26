@@ -31,10 +31,17 @@ Verified by building and running the package locally (test/smoke.sh, cloudron/ba
     surfaces are app-open even with the key set). This is why proxyAuth on `/ui` is correct and does
     not break the bundled UI.
 
+Verified on the real box (on-server build install, docling.example.com):
+
+- The on-server build succeeds and the app reaches healthy ("Wait for health check" passes), so
+  `/health` works through the Cloudron reverse proxy.
+- Anonymous probes through the proxy: `/health` 200, `/docs` 200, `/version` 200, `/ui` 302 to
+  `/login?redirect=/ui` (the proxyAuth SSO wall works), `POST /v1/convert/file` 401 without a key.
+- A keyed convert through the proxy (`X-Api-Key`) returns `status: success` with correct Markdown, so
+  the full pipeline runs end to end on the box.
+
 Assumed / still to verify on a real box:
 
-- That the `/ui` Gradio app functions end to end behind Cloudron SSO (the local probe shows the page
-  is reachable; the full SSO + browser interaction is a box check).
 - Update survival (the key and any `/app/data` cache persist across `cloudron update`).
 - Backup and restore (the key and HF cache survive byte-equal).
 
