@@ -3,6 +3,36 @@
 A running log of what was confirmed empirically versus carried over by assumption, per AGENTS.md
 golden rule 8. Newest first.
 
+## 2026-06-26 - hardening pass on the live box (docling.example.com, v1.0.0)
+
+Verified on the real box by backup, restore, and in-container inspection:
+
+- **Backup and restore survival.** A fresh `cloudron backup create` followed by `cloudron restore`
+  brings the app back healthy. The API key is byte-identical across the restore (same sha256), the
+  `/app/data` tree (hf cache, scratch, secrets) survives, ownership returns to `cloudron:cloudron`,
+  and `start.sh` takes the "existing API key found" path rather than regenerating. The live topology
+  is intact afterwards: `/health` 200, `POST /v1/convert/source` 401 without a key, `/ui` 302 to
+  `/login`, `/version` 200.
+- **Read-only root filesystem.** `/` is mounted `overlay ... (ro,...)`; only `/tmp` and `/app/data`
+  are `rw` (plus `/run`). A write to `/app/code` as the `cloudron` user fails with "Read-only file
+  system". The app process (PID 1) runs as `cloudron`. The runtime torch is `2.12.1+cpu` with
+  `torch.cuda.is_available()` False.
+
+Two findings, both fixed in this pass:
+
+- **Key file mode drifts to 0644 on restore.** `start.sh` previously set `chmod 0600` on the key only
+  in the first-run branch, but a Cloudron restore returns `keys.env` as `0644`. The `0700` parent
+  `.secrets` dir still blocks traversal, so it was not exploitable, but the file mode was looser than
+  intended. Fix: `start.sh` now re-asserts `chown cloudron:cloudron` and `chmod 0600` on the key on
+  every boot, idempotently, not only at creation.
+- **Hugging Face telemetry phones home on boot.** A `.agent_harnesses.json` manifest appears under
+  `HF_HOME` (`/app/data/hf`): huggingface_hub fetches it to enrich its telemetry user-agent. For a
+  self-hosted, models-baked package there is no reason to call out. Fix: `start.sh` now exports
+  `HF_HUB_DISABLE_TELEMETRY=1` and `DO_NOT_TRACK=1`. This does not block a deliberate model pull.
+
+Both fixes ship in the running container at the next `cloudron update` (the publish build); the live
+`0700` dir keeps the current key protected in the meantime.
+
 ## 2026-06-26 - initial packaging (docling-serve 1.25.0)
 
 Verified by inspecting the upstream image and docs:
@@ -42,14 +72,18 @@ Verified on the real box (on-server build install, docling.example.com):
 
 Assumed / still to verify on a real box:
 
-- Update survival (the key and any `/app/data` cache persist across `cloudron update`).
-- Backup and restore (the key and HF cache survive byte-equal).
+- Update survival (the key and any `/app/data` cache persist across `cloudron update`). To be
+  confirmed during the first publish update (1.0.0 -> 1.0.1). Backup and restore are now verified
+  (see the hardening pass above).
 
 Decisions recorded as ADRs: 0001 (pip-install on base), 0002 (bake models), 0003 (auth topology).
 
 Known follow-ups:
 
-- The image is large (~8.7 GB: torch plus baked models). A two-stage build (builder venv, final
-  stage copies it plus runtime libraries only) can slim it without changing any decision.
+- Image size: done in 1.0.1. A two-stage build copies only the venv and the baked models into a
+  fresh runtime stage, dropping uv's download cache (which the single-stage build had baked into its
+  layers) and the build-only packages. Measured: 8.74 GB single-stage -> 6.05 GB two-stage, with the
+  convert smoke still passing. The remainder is irreducible: cloudron/base is 2.48 GB, torch + the
+  ML/OCR wheels are about 2.6 GB, and the baked models are 0.74 GB.
 - For byte-level reproducibility, add a full dependency freeze (a constraints file) before the
   official-track publish; the top-level version is already pinned.
