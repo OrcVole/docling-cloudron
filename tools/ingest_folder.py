@@ -183,7 +183,7 @@ def main():
         print("adding to existing collection '%s'" % a.collection, flush=True)
 
     lock = threading.Lock()
-    stats = {"chunks": 0, "docs": 0}
+    stats = {"chunks": 0, "docs": 0, "done": 0, "total": len(files)}
 
     def process_one(path):
         rel = os.path.relpath(path, a.folder)
@@ -192,12 +192,14 @@ def main():
             md = convert(a.docling, dkey, path, os.path.basename(path))
         except Exception as e:
             with lock:
-                print("  SKIP %-50s %s" % (rel[:50], e), flush=True)
+                stats["done"] += 1
+                print("  [%d/%d] SKIP %-44s %s" % (stats["done"], stats["total"], rel[:44], e), flush=True)
             return
         chunks = chunk(md)
         if not chunks:
             with lock:
-                print("  SKIP %-50s (no text)" % rel[:50], flush=True)
+                stats["done"] += 1
+                print("  [%d/%d] SKIP %-44s (no text)" % (stats["done"], stats["total"], rel[:44]), flush=True)
             return
         vecs = embed_local(a.model, chunks) if a.local_embed else embed(a.tei, tkey, a.model, chunks)
         points = []
@@ -210,7 +212,8 @@ def main():
         with lock:
             stats["chunks"] += len(points)
             stats["docs"] += 1
-            print("  %-50s %4d chunks  (%.0fs)" % (rel[:50], len(chunks), time.time() - t0), flush=True)
+            stats["done"] += 1
+            print("  [%d/%d] %-44s %4d chunks  (%.0fs)" % (stats["done"], stats["total"], rel[:44], len(chunks), time.time() - t0), flush=True)
 
     if a.workers > 1:
         print("converting with %d concurrent workers" % a.workers, flush=True)
