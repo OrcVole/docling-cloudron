@@ -24,6 +24,8 @@ Usage:
   python3 ingest_folder.py /path/to/folder --collection myproject
   python3 ingest_folder.py /path/to/folder --collection myproject --recreate
   python3 ingest_folder.py /path/to/folder --collection myproject --model BAAI/bge-small-en-v1.5
+  # target an agentgateway mcp-server-qdrant collection (named vector + document/metadata payload):
+  python3 ingest_folder.py /path/to/folder --collection knowledge --for-agentgateway
 
 Notes:
   - The embedding model and dimension must match whatever queries the collection later (for example
@@ -34,7 +36,7 @@ import argparse, json, os, sys, time, uuid, urllib.request, urllib.error
 
 SUPPORTED = (".pdf", ".docx", ".pptx", ".xlsx", ".html", ".htm", ".md", ".markdown",
              ".adoc", ".asciidoc", ".csv", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp")
-NS = uuid.UUID("6f4b8d2e-0000-4000-8000-d0c1in9f01de")  # fixed namespace for deterministic IDs
+NS = uuid.UUID("6f4b8d2e-0000-4000-8000-d0c11a9f01de")  # fixed namespace for deterministic IDs
 
 
 def http(url, method="GET", headers=None, data=None, files=None, timeout=300):
@@ -108,10 +110,17 @@ def main():
     ap.add_argument("--collection", required=True)
     ap.add_argument("--recreate", action="store_true", help="delete and recreate the collection first")
     ap.add_argument("--model", default=os.environ.get("EMBED_MODEL", "BAAI/bge-small-en-v1.5"))
+    ap.add_argument("--vector-name", default="", help="store under a NAMED vector (e.g. fast-bge-small-en-v1.5); default is an unnamed vector")
+    ap.add_argument("--mcp-payload", action="store_true", help="payload as {document, metadata} (mcp-server-qdrant format) instead of {text, source, chunk}")
+    ap.add_argument("--for-agentgateway", action="store_true", help="shortcut: target an agentgateway mcp-server-qdrant collection (named vector fast-<model> plus --mcp-payload)")
     ap.add_argument("--docling", default=os.environ.get("DOCLING_URL", "http://127.0.0.1:5001"))
     ap.add_argument("--tei", default=os.environ.get("TEI_URL", ""))
     ap.add_argument("--qdrant", default=os.environ.get("QDRANT_URL", ""))
     a = ap.parse_args()
+    if a.for_agentgateway:
+        a.mcp_payload = True
+        if not a.vector_name:
+            a.vector_name = "fast-" + a.model.split("/")[-1].lower()
     dkey = os.environ.get("DOCLING_API_KEY", "")
     tkey = os.environ.get("TEI_API_KEY", "")
     qkey = os.environ.get("QDRANT_API_KEY", "")
@@ -139,8 +148,11 @@ def main():
         exists = False
     if not exists:
         dim = len(embed(a.tei, tkey, a.model, ["dimension probe"])[0])
-        http(f"{a.qdrant}/collections/{a.collection}", "PUT", qhdr, {"vectors": {"size": dim, "distance": "Cosine"}})
-        print("created collection '%s' (%d-dim, Cosine)" % (a.collection, dim), flush=True)
+        vparams = {"size": dim, "distance": "Cosine"}
+        vectors = {a.vector_name: vparams} if a.vector_name else vparams
+        http(f"{a.qdrant}/collections/{a.collection}", "PUT", qhdr, {"vectors": vectors})
+        print("created collection '%s' (%d-dim, Cosine%s)" % (
+            a.collection, dim, (", named vector '%s'" % a.vector_name) if a.vector_name else ""), flush=True)
     else:
         print("adding to existing collection '%s'" % a.collection, flush=True)
 
@@ -158,10 +170,12 @@ def main():
             print("  SKIP %-50s (no text)" % rel[:50], flush=True)
             continue
         vecs = embed(a.tei, tkey, a.model, chunks)
-        points = [{"id": str(uuid.uuid5(NS, "%s::%d" % (rel, i))),
-                   "vector": v,
-                   "payload": {"text": c, "source": rel, "chunk": i}}
-                  for i, (v, c) in enumerate(zip(vecs, chunks))]
+        points = []
+        for i, (v, c) in enumerate(zip(vecs, chunks)):
+            vec = {a.vector_name: v} if a.vector_name else v
+            payload = ({"document": c, "metadata": {"source": rel, "chunk": i}}
+                       if a.mcp_payload else {"text": c, "source": rel, "chunk": i})
+            points.append({"id": str(uuid.uuid5(NS, "%s::%d" % (rel, i))), "vector": vec, "payload": payload})
         http(f"{a.qdrant}/collections/{a.collection}/points?wait=true", "PUT", qhdr, {"points": points})
         total += len(points)
         print("  %-50s %4d chunks  (%.0fs)" % (rel[:50], len(chunks), time.time() - t0), flush=True)
