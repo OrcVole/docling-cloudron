@@ -1,0 +1,33 @@
+# Keep the build context tiny and free of secrets and local-only docs. Only the files the Dockerfile
+# actually needs (start.sh) plus a small set are sent to the daemon; everything else is excluded.
+.git
+.gitignore
+.claude/
+.secrets/
+*token*.txt
+*.token
+.anonymize-list
+.cloudron.json
+
+# Local-only and published docs are not needed inside the image.
+FOUNDATION-PROMPT.md
+NOTES.md
+STATUS.md
+RECON.md
+WIRING-NOTES.md
+docs/
+test/
+screenshots/
+config/examples/
+*.md
+
+# Scratch and caches.
+scratchpad/
+tmp/
+*.log
+__pycache__/
+*.pyc
+
+# The icon source is kept in the repo but not needed in the image (logo.png is referenced by the
+# manifest, not baked into the container).
+logo-source.svg
