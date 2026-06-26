@@ -30,9 +30,11 @@ Usage:
 Notes:
   - The embedding model and dimension must match whatever queries the collection later (for example
     an agentgateway MCP tool), or search returns poor matches even when the dimensions line up.
-  - This script uses only the Python standard library.
+  - Stdlib only by default. The optional --local-embed mode additionally needs `fastembed`, and
+    embeds with the exact same model mcp-server-qdrant uses for queries (tightest alignment).
 """
-import argparse, json, os, sys, time, uuid, urllib.request, urllib.error
+import argparse, json, os, sys, threading, time, uuid, urllib.request, urllib.error
+from concurrent.futures import ThreadPoolExecutor
 
 SUPPORTED = (".pdf", ".docx", ".pptx", ".xlsx", ".html", ".htm", ".md", ".markdown",
              ".adoc", ".asciidoc", ".csv", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp")
@@ -104,6 +106,25 @@ def embed(tei, key, model, texts, batch=32):
     return vecs
 
 
+_LOCAL_EMBEDDER = None
+_EMBED_LOCK = threading.Lock()
+
+
+def embed_local(model, texts):
+    """Embed locally with fastembed. This is the SAME embedder mcp-server-qdrant uses for queries,
+    so data and queries land in the identical space (tighter than TEI-data vs fastembed-query).
+    Serialized with a lock so it is safe to call from concurrent ingest workers."""
+    global _LOCAL_EMBEDDER
+    with _EMBED_LOCK:
+        if _LOCAL_EMBEDDER is None:
+            try:
+                from fastembed import TextEmbedding
+            except ImportError:
+                sys.exit("--local-embed needs fastembed (pip install fastembed)")
+            _LOCAL_EMBEDDER = TextEmbedding(model_name=model)
+        return [v.tolist() for v in _LOCAL_EMBEDDER.embed(list(texts))]
+
+
 def main():
     ap = argparse.ArgumentParser(description="Ingest a local folder into a Qdrant collection via Docling + embeddings.")
     ap.add_argument("folder")
@@ -113,6 +134,8 @@ def main():
     ap.add_argument("--vector-name", default="", help="store under a NAMED vector (e.g. fast-bge-small-en-v1.5); default is an unnamed vector")
     ap.add_argument("--mcp-payload", action="store_true", help="payload as {document, metadata} (mcp-server-qdrant format) instead of {text, source, chunk}")
     ap.add_argument("--for-agentgateway", action="store_true", help="shortcut: target an agentgateway mcp-server-qdrant collection (named vector fast-<model> plus --mcp-payload)")
+    ap.add_argument("--local-embed", action="store_true", help="embed locally with fastembed (matches mcp-server-qdrant's query embedder exactly) instead of calling TEI; needs fastembed")
+    ap.add_argument("--workers", type=int, default=1, help="convert N documents concurrently (one doc only uses ~5 cores; raise this to use more, and match docling-serve's eng_loc_num_workers)")
     ap.add_argument("--docling", default=os.environ.get("DOCLING_URL", "http://127.0.0.1:5001"))
     ap.add_argument("--tei", default=os.environ.get("TEI_URL", ""))
     ap.add_argument("--qdrant", default=os.environ.get("QDRANT_URL", ""))
@@ -124,8 +147,10 @@ def main():
     dkey = os.environ.get("DOCLING_API_KEY", "")
     tkey = os.environ.get("TEI_API_KEY", "")
     qkey = os.environ.get("QDRANT_API_KEY", "")
-    if not a.tei or not a.qdrant:
-        sys.exit("set TEI_URL and QDRANT_URL (env or flags)")
+    if not a.qdrant:
+        sys.exit("set QDRANT_URL (env or flag)")
+    if not a.local_embed and not a.tei:
+        sys.exit("set TEI_URL (env or flag), or pass --local-embed to embed locally with fastembed")
     qhdr = {"api-key": qkey} if qkey else {}
 
     files = []
@@ -147,7 +172,8 @@ def main():
     except urllib.error.HTTPError:
         exists = False
     if not exists:
-        dim = len(embed(a.tei, tkey, a.model, ["dimension probe"])[0])
+        dim = len((embed_local(a.model, ["dimension probe"]) if a.local_embed
+                   else embed(a.tei, tkey, a.model, ["dimension probe"]))[0])
         vparams = {"size": dim, "distance": "Cosine"}
         vectors = {a.vector_name: vparams} if a.vector_name else vparams
         http(f"{a.qdrant}/collections/{a.collection}", "PUT", qhdr, {"vectors": vectors})
@@ -156,20 +182,24 @@ def main():
     else:
         print("adding to existing collection '%s'" % a.collection, flush=True)
 
-    total = 0
-    for path in files:
+    lock = threading.Lock()
+    stats = {"chunks": 0, "docs": 0}
+
+    def process_one(path):
         rel = os.path.relpath(path, a.folder)
         t0 = time.time()
         try:
             md = convert(a.docling, dkey, path, os.path.basename(path))
         except Exception as e:
-            print("  SKIP %-50s %s" % (rel[:50], e), flush=True)
-            continue
+            with lock:
+                print("  SKIP %-50s %s" % (rel[:50], e), flush=True)
+            return
         chunks = chunk(md)
         if not chunks:
-            print("  SKIP %-50s (no text)" % rel[:50], flush=True)
-            continue
-        vecs = embed(a.tei, tkey, a.model, chunks)
+            with lock:
+                print("  SKIP %-50s (no text)" % rel[:50], flush=True)
+            return
+        vecs = embed_local(a.model, chunks) if a.local_embed else embed(a.tei, tkey, a.model, chunks)
         points = []
         for i, (v, c) in enumerate(zip(vecs, chunks)):
             vec = {a.vector_name: v} if a.vector_name else v
@@ -177,10 +207,20 @@ def main():
                        if a.mcp_payload else {"text": c, "source": rel, "chunk": i})
             points.append({"id": str(uuid.uuid5(NS, "%s::%d" % (rel, i))), "vector": vec, "payload": payload})
         http(f"{a.qdrant}/collections/{a.collection}/points?wait=true", "PUT", qhdr, {"points": points})
-        total += len(points)
-        print("  %-50s %4d chunks  (%.0fs)" % (rel[:50], len(chunks), time.time() - t0), flush=True)
+        with lock:
+            stats["chunks"] += len(points)
+            stats["docs"] += 1
+            print("  %-50s %4d chunks  (%.0fs)" % (rel[:50], len(chunks), time.time() - t0), flush=True)
 
-    print("\ndone: %d chunks across %d documents in collection '%s'" % (total, len(files), a.collection), flush=True)
+    if a.workers > 1:
+        print("converting with %d concurrent workers" % a.workers, flush=True)
+        with ThreadPoolExecutor(max_workers=a.workers) as ex:
+            list(ex.map(process_one, files))
+    else:
+        for path in files:
+            process_one(path)
+
+    print("\ndone: %d chunks across %d documents in collection '%s'" % (stats["chunks"], stats["docs"], a.collection), flush=True)
 
 
 if __name__ == "__main__":
