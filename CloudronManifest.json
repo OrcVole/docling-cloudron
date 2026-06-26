@@ -6,7 +6,7 @@
   "description": "file://DESCRIPTION.md",
   "changelog": "file://CHANGELOG.md",
   "icon": "file://logo.png",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "upstreamVersion": "1.25.0",
   "healthCheckPath": "/health",
   "httpPort": 5001,

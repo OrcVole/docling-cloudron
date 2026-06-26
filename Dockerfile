@@ -7,18 +7,23 @@
 # the app expects. The version is pinned by the DOCLING_SERVE_VERSION build argument; the manifest
 # mirrors it in upstreamVersion. The pipeline models are baked into the image at build time so the
 # first boot needs no download (avoiding the health-grace-vs-download race the TEI package hit).
+#
+# Two stages, both on the same cloudron/base (so the venv is portable between them, see ADR 0001):
+#   - builder: install the dev toolchain, create the venv, install the pinned release, bake the
+#     models. uv's multi-gigabyte download cache stays in this throwaway stage.
+#   - runtime: install only the runtime libraries and COPY the venv + models across. The image ships
+#     just the installed tree (about 2.5 GB lighter than a single-stage build that bakes the uv cache
+#     into its layers).
 
-FROM cloudron/base:5.0.0@sha256:04fd70dbd8ad6149c19de39e35718e024417c3e01dc9c6637eaf4a41ec4e596c
+# ===== Stage 1: builder =================================================================
+FROM cloudron/base:5.0.0@sha256:04fd70dbd8ad6149c19de39e35718e024417c3e01dc9c6637eaf4a41ec4e596c AS builder
 
 ARG DOCLING_SERVE_VERSION=1.25.0
 ENV DOCLING_SERVE_VERSION=${DOCLING_SERVE_VERSION}
 
-# --- System dependencies -------------------------------------------------------------------------
-# python3.12 (+venv): the interpreter; cloudron/base is Ubuntu 24.04, which ships Python 3.12, the
-#   same minor the upstream image uses, so wheels resolve cleanly.
-# tesseract-ocr(+eng): the Tesseract engine, usable by docling through its OCR CLI option.
-# libgl1, libglib2.0-0: OpenCV runtime libraries (docling, easyocr and rapidocr pull OpenCV).
-# libgomp1: OpenMP runtime used by onnxruntime / torch.
+# Build dependencies. The runtime libraries (tesseract, libGL, libgomp, libglib) are installed here
+# too because the model bake imports OpenCV; the runtime stage installs its own slimmer subset.
+# python3.12-dev and curl are build-only and are not carried into the runtime image.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python3.12 python3.12-venv python3.12-dev \
       tesseract-ocr tesseract-ocr-eng \
@@ -62,12 +67,38 @@ RUN ${VENV}/bin/docling-tools models download -o ${DOCLING_SERVE_ARTIFACTS_PATH}
       layout tableformer picture_classifier rapidocr easyocr \
     && chmod -R a+rX ${DOCLING_SERVE_ARTIFACTS_PATH}
 
+# ===== Stage 2: runtime =================================================================
+FROM cloudron/base:5.0.0@sha256:04fd70dbd8ad6149c19de39e35718e024417c3e01dc9c6637eaf4a41ec4e596c
+
+ARG DOCLING_SERVE_VERSION=1.25.0
+ENV DOCLING_SERVE_VERSION=${DOCLING_SERVE_VERSION}
+
+# Runtime libraries only (no -dev headers, no curl): the Python 3.12 interpreter the copied venv links
+# against, the Tesseract engine, and the OpenCV/OpenMP shared libraries the wheels dlopen.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3.12 python3.12-venv \
+      tesseract-ocr tesseract-ocr-eng \
+      libgl1 libglib2.0-0 libgomp1 \
+      ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV VENV=/app/code/venv
+ENV PATH=${VENV}/bin:${PATH} \
+    PYTHONUNBUFFERED=1 \
+    DOCLING_SERVE_ARTIFACTS_PATH=/app/code/models
+
+# Copy the built venv and the baked models from the builder. Both stages share the same cloudron/base
+# and the same /app/code/venv path, so the venv's interpreter symlinks and shebangs resolve unchanged.
+# Only the installed tree is copied; uv's download cache stays behind in the builder.
+COPY --from=builder /app/code/venv  /app/code/venv
+COPY --from=builder /app/code/models /app/code/models
+
 COPY start.sh /app/code/start.sh
 RUN chmod 0755 /app/code/start.sh
 
-# Build-time import + CLI gate: fail the build if the app cannot import or the CLI is broken on this
-# base. This does NOT run a real conversion (torch/opencv/tesseract are dlopen-heavy and not
-# exercised here), so the real gate is the runtime convert smoke in test/smoke.sh.
+# Runtime import + CLI gate on the assembled image: fail the build if the copied venv cannot import or
+# the CLI is broken. This does NOT run a real conversion (torch/opencv/tesseract are dlopen-heavy and
+# not exercised here), so the real gate is the runtime convert smoke in test/smoke.sh.
 RUN ${VENV}/bin/python -c "import docling, docling_serve, torch; from importlib.metadata import version; print('imports ok: docling-serve', version('docling-serve'), 'torch', torch.__version__)" \
     && ${VENV}/bin/docling-serve --help >/dev/null
 

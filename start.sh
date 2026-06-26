@@ -42,22 +42,33 @@ if [[ ! -f "${KEYS_ENV}" ]]; then
 DOCLING_SERVE_API_KEY=${GEN_KEY}
 EOF
   )
-  chown cloudron:cloudron "${KEYS_ENV}"
-  chmod 0600 "${KEYS_ENV}"
   unset GEN_KEY
   echo "==> [start] API key stored at ${KEYS_ENV}"
 else
   echo "==> [start] existing API key found"
 fi
 
+# Re-assert key ownership and mode on every boot, not only at creation. A Cloudron restore returns
+# keys.env as 0644 (verified empirically), so tightening it here keeps the secret file 0600 across
+# restores. The 0700 parent dir already blocks traversal; this is defense in depth.
+chown cloudron:cloudron "${KEYS_ENV}"
+chmod 0600 "${KEYS_ENV}"
+
 # 3. Load the key, then export the package-forced settings. Setting these from start.sh (not the
 #    Dockerfile) keeps the secret out of the image and lets a few stay operator-overridable.
-# shellcheck disable=SC1090,SC1091
-set -a; . "${KEYS_ENV}"; set +a
+set -a
+# shellcheck source=/dev/null
+. "${KEYS_ENV}"
+set +a
 export DOCLING_SERVE_API_KEY
 
 export HOME="${DATA}"                                   # stray ~/.cache writes land in backed-up state
 export HF_HOME="${HF_DIR}"
+# Self-hosted, offline-capable (models are baked). Disable Hugging Face usage telemetry so the app
+# does not phone home on boot to fetch the agent-harness manifest or send usage pings. This does not
+# block legitimate model pulls (an operator can still enable an optional VLM preset).
+export HF_HUB_DISABLE_TELEMETRY=1
+export DO_NOT_TRACK=1
 export DOCLING_SERVE_SCRATCH_PATH="${SCRATCH_DIR}"
 export DOCLING_SERVE_ARTIFACTS_PATH="${DOCLING_SERVE_ARTIFACTS_PATH:-/app/code/models}"
 export DOCLING_SERVE_ENABLE_UI="${DOCLING_SERVE_ENABLE_UI:-1}"
