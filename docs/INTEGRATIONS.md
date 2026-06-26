@@ -62,6 +62,24 @@ n8n is a natural orchestrator (it has HTTP, file-source, and Qdrant nodes). One 
 Keep the package generic: the workflow, the collection name, and the credentials are box-specific and
 live in n8n, not in this repository.
 
+## Local batch ingestion (tools/ingest_folder.py)
+
+For ingesting a folder of documents in one shot, `tools/ingest_folder.py` (standard library only)
+does the whole chain: it walks a folder, converts each file through a Docling endpoint, chunks and
+embeds the text, and upserts into a Qdrant collection (creating it if missing, or adding to an
+existing one). Point IDs are deterministic, so re-running updates a document in place.
+
+```bash
+DOCLING_URL=http://127.0.0.1:5001 DOCLING_API_KEY=... \
+TEI_URL=https://tei.example.com  TEI_API_KEY=... \
+QDRANT_URL=https://qdrant.example.com QDRANT_API_KEY=... \
+python3 tools/ingest_folder.py /path/to/folder --collection myproject
+```
+
+Run the Docling endpoint on a strong local machine (optionally a CUDA build for GPU acceleration) and
+send only the resulting vectors to a remote Qdrant; this keeps the heavy conversion off the smaller
+Cloudron host. The embedding `--model` must match whatever queries the collection later.
+
 ## Retrieval (gateway and chat UI)
 
 Once the collection is populated, a gateway with a vector-search tool (for example an MCP tool over

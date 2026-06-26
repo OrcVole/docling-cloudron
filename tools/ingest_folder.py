@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+"""
+ingest_folder.py - convert a local folder of documents with Docling and load them into a Qdrant
+collection, ready for semantic search.
+
+It points a Docling Serve endpoint (local or remote) at each file, converts to Markdown, chunks the
+text, embeds each chunk with an OpenAI-compatible embeddings server (for example the TEI package),
+and upserts the vectors into a Qdrant collection. Run Docling locally on a strong machine (optionally
+a CUDA build for GPU acceleration) and send only the resulting vectors to a remote Qdrant.
+
+Send results to a new ("empty project") collection or add to an existing one. Point IDs are
+deterministic (a UUID5 of the source path plus chunk index), so re-running updates a document in
+place instead of duplicating it.
+
+Configuration (environment variables, all overridable by flags):
+  DOCLING_URL        Docling Serve base URL              (e.g. http://127.0.0.1:5001)
+  DOCLING_API_KEY    Docling X-Api-Key                   (optional; omit if the endpoint is open)
+  TEI_URL            embeddings base URL                 (e.g. https://tei.example.com)
+  TEI_API_KEY        embeddings bearer token             (optional)
+  QDRANT_URL         Qdrant base URL                     (e.g. https://qdrant.example.com)
+  QDRANT_API_KEY     Qdrant api-key                      (optional)
+
+Usage:
+  python3 ingest_folder.py /path/to/folder --collection myproject
+  python3 ingest_folder.py /path/to/folder --collection myproject --recreate
+  python3 ingest_folder.py /path/to/folder --collection myproject --model BAAI/bge-small-en-v1.5
+
+Notes:
+  - The embedding model and dimension must match whatever queries the collection later (for example
+    an agentgateway MCP tool), or search returns poor matches even when the dimensions line up.
+  - This script uses only the Python standard library.
+"""
+import argparse, json, os, sys, time, uuid, urllib.request, urllib.error
+
+SUPPORTED = (".pdf", ".docx", ".pptx", ".xlsx", ".html", ".htm", ".md", ".markdown",
+             ".adoc", ".asciidoc", ".csv", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp")
+NS = uuid.UUID("6f4b8d2e-0000-4000-8000-d0c1in9f01de")  # fixed namespace for deterministic IDs
+
+
+def http(url, method="GET", headers=None, data=None, files=None, timeout=300):
+    h = dict(headers or {})
+    if files:
+        b = "----d" + uuid.uuid4().hex
+        fn, content, ctype = files
+        body = ("--%s\r\nContent-Disposition: form-data; name=\"files\"; filename=\"%s\"\r\n"
+                "Content-Type: %s\r\n\r\n" % (b, fn, ctype)).encode() + content + ("\r\n--%s--\r\n" % b).encode()
+        h["Content-Type"] = "multipart/form-data; boundary=%s" % b
+        data = body
+    elif data is not None and not isinstance(data, bytes):
+        data = json.dumps(data).encode()
+        h["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, headers=h, method=method)
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        raw = r.read().decode()
+        return json.loads(raw) if raw.strip() else {}
+
+
+def convert(docling, key, path, fname):
+    """Convert one file via Docling's async endpoint and return its Markdown."""
+    hdr = {"X-Api-Key": key} if key else {}
+    content = open(path, "rb").read()
+    r = http(f"{docling}/v1/convert/file/async", "POST", hdr, files=(fname, content, "application/octet-stream"), timeout=120)
+    tid = r.get("task_id") or r.get("task", {}).get("task_id")
+    for _ in range(1200):  # up to ~1 hour for very large documents
+        s = http(f"{docling}/v1/status/poll/{tid}", "GET", hdr, timeout=60)
+        st = s.get("task_status") or s.get("status")
+        if st in ("success", "completed"):
+            break
+        if st in ("failure", "error"):
+            raise RuntimeError("conversion failed: %s" % json.dumps(s)[:200])
+        time.sleep(3)
+    res = http(f"{docling}/v1/result/{tid}", "GET", hdr, timeout=120)
+    return res.get("document", {}).get("md_content", "")
+
+
+def chunk(md, size=1000, overlap=120):
+    paras = [p.strip() for p in md.split("\n\n") if p.strip()]
+    out, cur = [], ""
+    for p in paras:
+        if len(cur) + len(p) + 2 <= size:
+            cur = (cur + "\n\n" + p).strip()
+        else:
+            if cur:
+                out.append(cur)
+            if len(p) <= size:
+                cur = p
+            else:
+                for i in range(0, len(p), size - overlap):
+                    out.append(p[i:i + size])
+                cur = ""
+    if cur:
+        out.append(cur)
+    return [c for c in out if len(c) > 30]
+
+
+def embed(tei, key, model, texts, batch=32):
+    hdr = {"Authorization": "Bearer " + key} if key else {}
+    vecs = []
+    for i in range(0, len(texts), batch):
+        d = http(f"{tei}/v1/embeddings", "POST", hdr, {"input": texts[i:i + batch], "model": model}, timeout=120)
+        vecs += [x["embedding"] for x in d["data"]]
+    return vecs
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Ingest a local folder into a Qdrant collection via Docling + embeddings.")
+    ap.add_argument("folder")
+    ap.add_argument("--collection", required=True)
+    ap.add_argument("--recreate", action="store_true", help="delete and recreate the collection first")
+    ap.add_argument("--model", default=os.environ.get("EMBED_MODEL", "BAAI/bge-small-en-v1.5"))
+    ap.add_argument("--docling", default=os.environ.get("DOCLING_URL", "http://127.0.0.1:5001"))
+    ap.add_argument("--tei", default=os.environ.get("TEI_URL", ""))
+    ap.add_argument("--qdrant", default=os.environ.get("QDRANT_URL", ""))
+    a = ap.parse_args()
+    dkey = os.environ.get("DOCLING_API_KEY", "")
+    tkey = os.environ.get("TEI_API_KEY", "")
+    qkey = os.environ.get("QDRANT_API_KEY", "")
+    if not a.tei or not a.qdrant:
+        sys.exit("set TEI_URL and QDRANT_URL (env or flags)")
+    qhdr = {"api-key": qkey} if qkey else {}
+
+    files = []
+    for root, _, names in os.walk(a.folder):
+        for n in sorted(names):
+            if n.lower().endswith(SUPPORTED):
+                files.append(os.path.join(root, n))
+    if not files:
+        sys.exit("no supported documents under %s" % a.folder)
+    print("found %d documents under %s" % (len(files), a.folder), flush=True)
+
+    # Decide collection: create if missing (dimension probed from one embedding), or add to existing.
+    if a.recreate:
+        try: http(f"{a.qdrant}/collections/{a.collection}", "DELETE", qhdr)
+        except Exception: pass
+    try:
+        info = http(f"{a.qdrant}/collections/{a.collection}", "GET", qhdr)
+        exists = info.get("status") == "ok"
+    except urllib.error.HTTPError:
+        exists = False
+    if not exists:
+        dim = len(embed(a.tei, tkey, a.model, ["dimension probe"])[0])
+        http(f"{a.qdrant}/collections/{a.collection}", "PUT", qhdr, {"vectors": {"size": dim, "distance": "Cosine"}})
+        print("created collection '%s' (%d-dim, Cosine)" % (a.collection, dim), flush=True)
+    else:
+        print("adding to existing collection '%s'" % a.collection, flush=True)
+
+    total = 0
+    for path in files:
+        rel = os.path.relpath(path, a.folder)
+        t0 = time.time()
+        try:
+            md = convert(a.docling, dkey, path, os.path.basename(path))
+        except Exception as e:
+            print("  SKIP %-50s %s" % (rel[:50], e), flush=True)
+            continue
+        chunks = chunk(md)
+        if not chunks:
+            print("  SKIP %-50s (no text)" % rel[:50], flush=True)
+            continue
+        vecs = embed(a.tei, tkey, a.model, chunks)
+        points = [{"id": str(uuid.uuid5(NS, "%s::%d" % (rel, i))),
+                   "vector": v,
+                   "payload": {"text": c, "source": rel, "chunk": i}}
+                  for i, (v, c) in enumerate(zip(vecs, chunks))]
+        http(f"{a.qdrant}/collections/{a.collection}/points?wait=true", "PUT", qhdr, {"points": points})
+        total += len(points)
+        print("  %-50s %4d chunks  (%.0fs)" % (rel[:50], len(chunks), time.time() - t0), flush=True)
+
+    print("\ndone: %d chunks across %d documents in collection '%s'" % (total, len(files), a.collection), flush=True)
+
+
+if __name__ == "__main__":
+    main()
