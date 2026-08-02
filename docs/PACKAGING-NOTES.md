@@ -3,7 +3,20 @@
 A running log of what was confirmed empirically versus carried over by assumption, per AGENTS.md
 golden rule 8. Newest first.
 
-## 2026-06-26 - hardening pass on the live box (docling.example.com, v1.0.0)
+## 2026-08-02 - update round timing: this package is structurally slow to release
+
+1.0.1 -> 1.0.2 (upstream 1.25.0 -> 1.29.0). The bump itself was trivial (15 commits, no auth or
+entrypoint change; upstream removed the unused `DOCLING_SERVE_ENG_KFP_*` settings, which this
+package never set). What was NOT fast: the image is ~6 GB (CPU torch plus the five baked pipeline
+models), so both `podman build` (full pip resolve, torch install, model download) and `podman push`
+to GHCR ran to roughly ten-plus minutes each on this workstation's connection, dwarfing every other
+step in the release. **This is a property of the package, not of this one round** — every future
+docling-serve update will pay the same build and push time regardless of how small the upstream
+diff is. For the next update round: start this package's build in the background as early as
+possible (even before the version bump is fully decided, using a placeholder tag, if the diff read
+is otherwise done) and work on other packages' mechanical or reasoning-tier work while it runs,
+rather than waiting on it serially. Do not schedule this package last in a round if the round is
+time-boxed; its long pole is fixed cost, not diff size, so put it where the wait can overlap.
 
 Verified on the real box by backup, restore, and in-container inspection:
 

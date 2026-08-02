@@ -18,7 +18,7 @@
 # ===== Stage 1: builder =================================================================
 FROM cloudron/base:5.0.0@sha256:04fd70dbd8ad6149c19de39e35718e024417c3e01dc9c6637eaf4a41ec4e596c AS builder
 
-ARG DOCLING_SERVE_VERSION=1.25.0
+ARG DOCLING_SERVE_VERSION=1.29.0
 ENV DOCLING_SERVE_VERSION=${DOCLING_SERVE_VERSION}
 
 # Build dependencies. The runtime libraries (tesseract, libGL, libgomp, libglib) are installed here
@@ -70,7 +70,7 @@ RUN ${VENV}/bin/docling-tools models download -o ${DOCLING_SERVE_ARTIFACTS_PATH}
 # ===== Stage 2: runtime =================================================================
 FROM cloudron/base:5.0.0@sha256:04fd70dbd8ad6149c19de39e35718e024417c3e01dc9c6637eaf4a41ec4e596c
 
-ARG DOCLING_SERVE_VERSION=1.25.0
+ARG DOCLING_SERVE_VERSION=1.29.0
 ENV DOCLING_SERVE_VERSION=${DOCLING_SERVE_VERSION}
 
 # Runtime libraries only (no -dev headers, no curl): the Python 3.12 interpreter the copied venv links
