@@ -4,7 +4,15 @@ All notable changes to this Cloudron package are documented here. The package ve
 repository's own semver and moves independently of the upstream docling-serve version, which is
 recorded in `upstreamVersion` in the manifest.
 
-## [1.0.1] - 2026-06-26
+[1.0.2]
+_2026-08-02_
+
+Bump upstream to docling-serve 1.29.0 (15 commits since 1.25.0). No auth or entrypoint change;
+upstream removed the unused KFP engine settings (`DOCLING_SERVE_ENG_KFP_*`), which this package
+never set. Adds the `<upstream>` tag to DESCRIPTION.md.
+
+[1.0.1]
+_2026-06-26_
 
 First published release. Hardening and a smaller image; no behaviour or topology change.
 
@@ -21,7 +29,8 @@ First published release. Hardening and a smaller image; no behaviour or topology
 - Verified on the box: backup and restore survival (the key, the `/app/data` caches, and ownership
   survive, and the auth topology is intact afterwards).
 
-## [1.0.0] - 2026-06-26
+[1.0.0]
+_2026-06-26_
 
 Initial package. Packages docling-serve 1.25.0 for Cloudron. Built and deployed to the target box;
 not published.
