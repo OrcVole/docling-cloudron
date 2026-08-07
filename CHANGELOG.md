@@ -4,6 +4,15 @@ All notable changes to this Cloudron package are documented here. The package ve
 repository's own semver and moves independently of the upstream docling-serve version, which is
 recorded in `upstreamVersion` in the manifest.
 
+[1.0.3]
+_2026-08-07_
+
+* Update docling-serve 1.29.0 -> 1.30.0 (upstream release 2026-08-07)
+* Upstream: Docling v2.118.0 (new backends, heading-hierarchy options and fixes),
+  docling-jobkit v3.3.0 (new connectors); UI exposes PDF heading-level inference
+* No packaging changes: proxyAuth on /ui, keyed convert API and key handling unchanged;
+  transformers constraint byte-identical between releases
+
 [1.0.2]
 _2026-08-02_
 
