@@ -1,115 +1,170 @@
 {
-    "stable": true,
-    "versions": {
-        "1.0.1": {
-            "manifest": {
-                "id": "io.github.orcvole.docling",
-                "title": "Docling Serve",
-                "author": "OrcVole",
-                "tagline": "Convert documents to clean Markdown and JSON (Docling)",
-                "description": "Docling Serve converts documents into clean, structured Markdown and JSON through an HTTP API. It is\nthe API server for Docling, the open document-conversion toolkit, packaged here for Cloudron.\n\nPoint it at a PDF, DOCX, PPTX, XLSX, HTML, Markdown, or an image and it returns well-structured text\nwith the reading order preserved. It recovers page layout, reconstructs tables, reads embedded and\nscanned text with OCR, and classifies pictures, so the output is faithful enough to feed a\nretrieval-augmented-generation pipeline or any downstream text process.\n\nWhat you get on Cloudron:\n\n- A document-conversion API on one HTTP port, protected by an API key that is generated for you on\n  first install. Send it as the `X-Api-Key` header to the `/v1/convert/*` endpoints.\n- A demonstrator web UI at `/ui`, placed behind Cloudron single sign-on, for converting a document\n  in the browser without writing any code.\n- Interactive OpenAPI documentation at `/docs`.\n- The full default pipeline (layout analysis, TableFormer table structure, the EasyOCR and RapidOCR\n  engines, picture classification) with its models baked into the image, so the app works the moment\n  it finishes installing, with no first-boot download and no external model server.\n\nIt runs CPU-only, stores all state under its data volume so Cloudron backs it up, and ships with\nsensible, secure defaults. It pairs naturally with an embeddings server and a vector database to\nbuild a self-hosted \"ask questions about my own documents\" stack.\n\nDocling is open source under the MIT license. This package tracks the upstream docling-serve release\nand adapts only the runtime environment to Cloudron; it does not modify Docling itself.\n",
-                "changelog": "# Changelog\n\nAll notable changes to this Cloudron package are documented here. The package version is this\nrepository's own semver and moves independently of the upstream docling-serve version, which is\nrecorded in `upstreamVersion` in the manifest.\n\n## [1.0.1] - 2026-06-26\n\nFirst published release. Hardening and a smaller image; no behaviour or topology change.\n\n- Two-stage build. The image is built in a throwaway builder stage, and only the installed venv and\n  the baked models are copied into a fresh `cloudron/base` runtime stage. This drops uv's multi-\n  gigabyte download cache and the build-only packages, taking the image from about 8.7 GB to about\n  6.0 GB. No packaging decision changes (see ADR 0001).\n- The API key file is re-asserted to mode `0600` on every boot, not only at creation. A Cloudron\n  restore returns the key file as `0644`; the `0700` parent directory still blocks traversal, but the\n  file is now tightened on each start as defense in depth.\n- Hugging Face telemetry is disabled (`HF_HUB_DISABLE_TELEMETRY=1`, `DO_NOT_TRACK=1`) so the app does\n  not phone home on boot. The default pipeline models are baked in, so this removes the only routine\n  outbound call without blocking a deliberate model pull.\n- Verified on the box: backup and restore survival (the key, the `/app/data` caches, and ownership\n  survive, and the auth topology is intact afterwards).\n\n## [1.0.0] - 2026-06-26\n\nInitial package. Packages docling-serve 1.25.0 for Cloudron. Built and deployed to the target box;\nnot published.\n\n- Multi-stage-free build straight onto `cloudron/base` (Ubuntu 24.04, Python 3.12): the pinned\n  docling-serve release is installed with uv, CPU-only torch from the PyTorch CPU index.\n- The default pipeline models (layout, TableFormer, picture classifier, RapidOCR, EasyOCR) are baked\n  into the image, so the app is ready on first boot with no model download.\n- API key generated on first run and stored under `/app/data/.secrets`; sent as the `X-Api-Key`\n  header to the `/v1/convert/*` endpoints.\n- The demonstrator UI (`/ui`) is enabled and scoped behind Cloudron single sign-on via `proxyAuth`;\n  the convert API stays open at the network level and is protected by the key.\n- All mutable state (HF cache, conversion scratch, the key) is kept under `/app/data` for backup.\n- Runs as the `cloudron` user on the non-privileged port 5001.\n",
-                "icon": "file://logo.png",
-                "version": "1.0.1",
-                "upstreamVersion": "1.25.0",
-                "healthCheckPath": "/health",
-                "httpPort": 5001,
-                "addons": {
-                    "localstorage": {},
-                    "proxyAuth": {
-                        "path": "/ui"
-                    }
-                },
-                "memoryLimit": 4294967296,
-                "configurePath": "/ui",
-                "optionalSso": true,
-                "postInstallMessage": "Docling Serve is installed and ready. The document-conversion pipeline and its models ship inside the\nimage, so there is no first-boot download to wait for.\n\nYour API key was generated on first run. To read it, open a Terminal for this app (the >_ button in\nthe Cloudron dashboard) and run:\n\ncat /app/data/.secrets/keys.env\n\nSend that key as the HTTP header  X-Api-Key: YOUR_KEY  on every call to the conversion API.\n\nConvert a document from the command line (replace YOUR_KEY and the file path):\n\ncurl -X POST https://APP_DOMAIN/v1/convert/file -H \"X-Api-Key: YOUR_KEY\" -F \"files=@/path/to/document.pdf\"\n\nThe response is JSON containing the converted Markdown.\n\nThe browser surfaces, both behind your Cloudron login:\n\n- /ui   a demonstrator interface for converting a document by hand. The \"Open\" button in the\n  dashboard goes here.\n- /docs  the interactive OpenAPI documentation for every endpoint.\n\nNotes:\n\n- The conversion API is open at the network level and protected by the key, so scripts and other apps\n  can reach it without a Cloudron login. The /ui and /docs pages require your Cloudron login.\n- All state (the key, the model cache, conversion scratch) lives under /app/data and is included in\n  Cloudron backups.\n- Document conversion, especially OCR on scanned pages, is memory and CPU intensive. If large jobs\n  fail, raise this app's memory limit in the dashboard (Resources) and try again.\n- Tesseract, EasyOCR and RapidOCR are all available as OCR engines; EasyOCR is the default.\n",
-                "checklist": {
-                    "apikey": {
-                        "message": "Get your API key: open a Terminal for this app (the `>_` button) and run `cat /app/data/.secrets/keys.env`. Send it as the header `X-Api-Key: <key>` to the `/v1/convert/*` endpoints."
-                    },
-                    "ui": {
-                        "message": "Open the demonstrator UI at `/ui` (behind Cloudron login) to convert a document in the browser. The OpenAPI docs are at `/docs`."
-                    }
-                },
-                "tags": [
-                    "ai",
-                    "documents",
-                    "ocr",
-                    "rag",
-                    "markdown"
-                ],
-                "mediaLinks": [
-                    "https://raw.githubusercontent.com/OrcVole/docling-cloudron/main/logo.png"
-                ],
-                "website": "https://github.com/OrcVole/docling-cloudron",
-                "documentationUrl": "https://github.com/OrcVole/docling-cloudron",
-                "contactEmail": "OrcVole@users.noreply.github.com",
-                "packagerName": "OrcVole",
-                "packagerUrl": "https://github.com/OrcVole/docling-cloudron",
-                "manifestVersion": 2,
-                "minBoxVersion": "9.1.0",
-                "iconUrl": "https://raw.githubusercontent.com/OrcVole/docling-cloudron/main/logo.png",
-                "dockerImage": "ghcr.io/orcvole/docling-cloudron@sha256:5ba35abee2991e9e4f931d296e981cca946b857913c86a355d3a139c0b2156fe"
-            },
-            "creationDate": "2026-06-26T08:08:04.976Z",
-            "ts": 1782461284976,
-            "publishState": "published"
+  "stable": true,
+  "versions": {
+    "1.0.1": {
+      "manifest": {
+        "id": "io.github.orcvole.docling",
+        "title": "Docling Serve",
+        "author": "OrcVole",
+        "tagline": "Convert documents to clean Markdown and JSON (Docling)",
+        "description": "Docling Serve converts documents into clean, structured Markdown and JSON through an HTTP API. It is\nthe API server for Docling, the open document-conversion toolkit, packaged here for Cloudron.\n\nPoint it at a PDF, DOCX, PPTX, XLSX, HTML, Markdown, or an image and it returns well-structured text\nwith the reading order preserved. It recovers page layout, reconstructs tables, reads embedded and\nscanned text with OCR, and classifies pictures, so the output is faithful enough to feed a\nretrieval-augmented-generation pipeline or any downstream text process.\n\nWhat you get on Cloudron:\n\n- A document-conversion API on one HTTP port, protected by an API key that is generated for you on\n  first install. Send it as the `X-Api-Key` header to the `/v1/convert/*` endpoints.\n- A demonstrator web UI at `/ui`, placed behind Cloudron single sign-on, for converting a document\n  in the browser without writing any code.\n- Interactive OpenAPI documentation at `/docs`.\n- The full default pipeline (layout analysis, TableFormer table structure, the EasyOCR and RapidOCR\n  engines, picture classification) with its models baked into the image, so the app works the moment\n  it finishes installing, with no first-boot download and no external model server.\n\nIt runs CPU-only, stores all state under its data volume so Cloudron backs it up, and ships with\nsensible, secure defaults. It pairs naturally with an embeddings server and a vector database to\nbuild a self-hosted \"ask questions about my own documents\" stack.\n\nDocling is open source under the MIT license. This package tracks the upstream docling-serve release\nand adapts only the runtime environment to Cloudron; it does not modify Docling itself.\n",
+        "changelog": "# Changelog\n\nAll notable changes to this Cloudron package are documented here. The package version is this\nrepository's own semver and moves independently of the upstream docling-serve version, which is\nrecorded in `upstreamVersion` in the manifest.\n\n## [1.0.1] - 2026-06-26\n\nFirst published release. Hardening and a smaller image; no behaviour or topology change.\n\n- Two-stage build. The image is built in a throwaway builder stage, and only the installed venv and\n  the baked models are copied into a fresh `cloudron/base` runtime stage. This drops uv's multi-\n  gigabyte download cache and the build-only packages, taking the image from about 8.7 GB to about\n  6.0 GB. No packaging decision changes (see ADR 0001).\n- The API key file is re-asserted to mode `0600` on every boot, not only at creation. A Cloudron\n  restore returns the key file as `0644`; the `0700` parent directory still blocks traversal, but the\n  file is now tightened on each start as defense in depth.\n- Hugging Face telemetry is disabled (`HF_HUB_DISABLE_TELEMETRY=1`, `DO_NOT_TRACK=1`) so the app does\n  not phone home on boot. The default pipeline models are baked in, so this removes the only routine\n  outbound call without blocking a deliberate model pull.\n- Verified on the box: backup and restore survival (the key, the `/app/data` caches, and ownership\n  survive, and the auth topology is intact afterwards).\n\n## [1.0.0] - 2026-06-26\n\nInitial package. Packages docling-serve 1.25.0 for Cloudron. Built and deployed to the target box;\nnot published.\n\n- Multi-stage-free build straight onto `cloudron/base` (Ubuntu 24.04, Python 3.12): the pinned\n  docling-serve release is installed with uv, CPU-only torch from the PyTorch CPU index.\n- The default pipeline models (layout, TableFormer, picture classifier, RapidOCR, EasyOCR) are baked\n  into the image, so the app is ready on first boot with no model download.\n- API key generated on first run and stored under `/app/data/.secrets`; sent as the `X-Api-Key`\n  header to the `/v1/convert/*` endpoints.\n- The demonstrator UI (`/ui`) is enabled and scoped behind Cloudron single sign-on via `proxyAuth`;\n  the convert API stays open at the network level and is protected by the key.\n- All mutable state (HF cache, conversion scratch, the key) is kept under `/app/data` for backup.\n- Runs as the `cloudron` user on the non-privileged port 5001.\n",
+        "icon": "file://logo.png",
+        "version": "1.0.1",
+        "upstreamVersion": "1.25.0",
+        "healthCheckPath": "/health",
+        "httpPort": 5001,
+        "addons": {
+          "localstorage": {},
+          "proxyAuth": {
+            "path": "/ui"
+          }
         },
-        "1.0.2": {
-            "manifest": {
-                "id": "io.github.orcvole.docling",
-                "title": "Docling Serve",
-                "author": "OrcVole",
-                "tagline": "Convert documents to clean Markdown and JSON (Docling)",
-                "description": "<upstream>1.29.0</upstream>\n\nDocling Serve converts documents into clean, structured Markdown and JSON through an HTTP API. It is\nthe API server for Docling, the open document-conversion toolkit, packaged here for Cloudron.\n\nPoint it at a PDF, DOCX, PPTX, XLSX, HTML, Markdown, or an image and it returns well-structured text\nwith the reading order preserved. It recovers page layout, reconstructs tables, reads embedded and\nscanned text with OCR, and classifies pictures, so the output is faithful enough to feed a\nretrieval-augmented-generation pipeline or any downstream text process.\n\nWhat you get on Cloudron:\n\n- A document-conversion API on one HTTP port, protected by an API key that is generated for you on\n  first install. Send it as the `X-Api-Key` header to the `/v1/convert/*` endpoints.\n- A demonstrator web UI at `/ui`, placed behind Cloudron single sign-on, for converting a document\n  in the browser without writing any code.\n- Interactive OpenAPI documentation at `/docs`.\n- The full default pipeline (layout analysis, TableFormer table structure, the EasyOCR and RapidOCR\n  engines, picture classification) with its models baked into the image, so the app works the moment\n  it finishes installing, with no first-boot download and no external model server.\n\nIt runs CPU-only, stores all state under its data volume so Cloudron backs it up, and ships with\nsensible, secure defaults. It pairs naturally with an embeddings server and a vector database to\nbuild a self-hosted \"ask questions about my own documents\" stack.\n\nDocling is open source under the MIT license. This package tracks the upstream docling-serve release\nand adapts only the runtime environment to Cloudron; it does not modify Docling itself.\n",
-                "changelog": "_2026-08-02_\nBump upstream to docling-serve 1.29.0 (15 commits since 1.25.0). No auth or entrypoint change;\nupstream removed the unused KFP engine settings (`DOCLING_SERVE_ENG_KFP_*`), which this package\nnever set. Adds the `<upstream>` tag to DESCRIPTION.md.\n",
-                "icon": "file://logo.png",
-                "version": "1.0.2",
-                "upstreamVersion": "1.29.0",
-                "healthCheckPath": "/health",
-                "httpPort": 5001,
-                "addons": {
-                    "localstorage": {},
-                    "proxyAuth": {
-                        "path": "/ui"
-                    }
-                },
-                "memoryLimit": 4294967296,
-                "configurePath": "/ui",
-                "optionalSso": true,
-                "postInstallMessage": "Docling Serve is installed and ready. The document-conversion pipeline and its models ship inside the\nimage, so there is no first-boot download to wait for.\n\nYour API key was generated on first run. To read it, open a Terminal for this app (the >_ button in\nthe Cloudron dashboard) and run:\n\ncat /app/data/.secrets/keys.env\n\nSend that key as the HTTP header  X-Api-Key: YOUR_KEY  on every call to the conversion API.\n\nConvert a document from the command line (replace YOUR_KEY and the file path):\n\ncurl -X POST https://APP_DOMAIN/v1/convert/file -H \"X-Api-Key: YOUR_KEY\" -F \"files=@/path/to/document.pdf\"\n\nThe response is JSON containing the converted Markdown.\n\nThe browser surfaces, both behind your Cloudron login:\n\n- /ui   a demonstrator interface for converting a document by hand. The \"Open\" button in the\n  dashboard goes here.\n- /docs  the interactive OpenAPI documentation for every endpoint.\n\nNotes:\n\n- The conversion API is open at the network level and protected by the key, so scripts and other apps\n  can reach it without a Cloudron login. The /ui and /docs pages require your Cloudron login.\n- All state (the key, the model cache, conversion scratch) lives under /app/data and is included in\n  Cloudron backups.\n- Document conversion, especially OCR on scanned pages, is memory and CPU intensive. If large jobs\n  fail, raise this app's memory limit in the dashboard (Resources) and try again.\n- Tesseract, EasyOCR and RapidOCR are all available as OCR engines; EasyOCR is the default.\n",
-                "checklist": {
-                    "apikey": {
-                        "message": "Get your API key: open a Terminal for this app (the `>_` button) and run `cat /app/data/.secrets/keys.env`. Send it as the header `X-Api-Key: <key>` to the `/v1/convert/*` endpoints."
-                    },
-                    "ui": {
-                        "message": "Open the demonstrator UI at `/ui` (behind Cloudron login) to convert a document in the browser. The OpenAPI docs are at `/docs`."
-                    }
-                },
-                "tags": [
-                    "ai",
-                    "documents",
-                    "ocr",
-                    "rag",
-                    "markdown"
-                ],
-                "mediaLinks": [
-                    "https://raw.githubusercontent.com/OrcVole/docling-cloudron/main/logo.png"
-                ],
-                "website": "https://github.com/OrcVole/docling-cloudron",
-                "documentationUrl": "https://github.com/OrcVole/docling-cloudron",
-                "contactEmail": "OrcVole@users.noreply.github.com",
-                "packagerName": "OrcVole",
-                "packagerUrl": "https://github.com/OrcVole/docling-cloudron",
-                "manifestVersion": 2,
-                "minBoxVersion": "9.1.0",
-                "iconUrl": "https://raw.githubusercontent.com/OrcVole/docling-cloudron/main/logo.png",
-                "dockerImage": "ghcr.io/orcvole/docling-cloudron@sha256:93e05a437f5eaa3e494ec51abdc190a9f1fb8035f8bcfb3d89c4c2668a1bc4a0"
-            },
-            "creationDate": "Sun, 02 Aug 2026 18:39:53 GMT",
-            "ts": 1785695993000,
-            "publishState": "published"
-        }
+        "memoryLimit": 4294967296,
+        "configurePath": "/ui",
+        "optionalSso": true,
+        "postInstallMessage": "Docling Serve is installed and ready. The document-conversion pipeline and its models ship inside the\nimage, so there is no first-boot download to wait for.\n\nYour API key was generated on first run. To read it, open a Terminal for this app (the >_ button in\nthe Cloudron dashboard) and run:\n\ncat /app/data/.secrets/keys.env\n\nSend that key as the HTTP header  X-Api-Key: YOUR_KEY  on every call to the conversion API.\n\nConvert a document from the command line (replace YOUR_KEY and the file path):\n\ncurl -X POST https://APP_DOMAIN/v1/convert/file -H \"X-Api-Key: YOUR_KEY\" -F \"files=@/path/to/document.pdf\"\n\nThe response is JSON containing the converted Markdown.\n\nThe browser surfaces, both behind your Cloudron login:\n\n- /ui   a demonstrator interface for converting a document by hand. The \"Open\" button in the\n  dashboard goes here.\n- /docs  the interactive OpenAPI documentation for every endpoint.\n\nNotes:\n\n- The conversion API is open at the network level and protected by the key, so scripts and other apps\n  can reach it without a Cloudron login. The /ui and /docs pages require your Cloudron login.\n- All state (the key, the model cache, conversion scratch) lives under /app/data and is included in\n  Cloudron backups.\n- Document conversion, especially OCR on scanned pages, is memory and CPU intensive. If large jobs\n  fail, raise this app's memory limit in the dashboard (Resources) and try again.\n- Tesseract, EasyOCR and RapidOCR are all available as OCR engines; EasyOCR is the default.\n",
+        "checklist": {
+          "apikey": {
+            "message": "Get your API key: open a Terminal for this app (the `>_` button) and run `cat /app/data/.secrets/keys.env`. Send it as the header `X-Api-Key: <key>` to the `/v1/convert/*` endpoints."
+          },
+          "ui": {
+            "message": "Open the demonstrator UI at `/ui` (behind Cloudron login) to convert a document in the browser. The OpenAPI docs are at `/docs`."
+          }
+        },
+        "tags": [
+          "ai",
+          "documents",
+          "ocr",
+          "rag",
+          "markdown"
+        ],
+        "mediaLinks": [
+          "https://raw.githubusercontent.com/OrcVole/docling-cloudron/main/logo.png"
+        ],
+        "website": "https://github.com/OrcVole/docling-cloudron",
+        "documentationUrl": "https://github.com/OrcVole/docling-cloudron",
+        "contactEmail": "OrcVole@users.noreply.github.com",
+        "packagerName": "OrcVole",
+        "packagerUrl": "https://github.com/OrcVole/docling-cloudron",
+        "manifestVersion": 2,
+        "minBoxVersion": "9.1.0",
+        "iconUrl": "https://raw.githubusercontent.com/OrcVole/docling-cloudron/main/logo.png",
+        "dockerImage": "ghcr.io/orcvole/docling-cloudron@sha256:5ba35abee2991e9e4f931d296e981cca946b857913c86a355d3a139c0b2156fe"
+      },
+      "creationDate": "2026-06-26T08:08:04.976Z",
+      "ts": 1782461284976,
+      "publishState": "published"
+    },
+    "1.0.2": {
+      "manifest": {
+        "id": "io.github.orcvole.docling",
+        "title": "Docling Serve",
+        "author": "OrcVole",
+        "tagline": "Convert documents to clean Markdown and JSON (Docling)",
+        "description": "<upstream>1.29.0</upstream>\n\nDocling Serve converts documents into clean, structured Markdown and JSON through an HTTP API. It is\nthe API server for Docling, the open document-conversion toolkit, packaged here for Cloudron.\n\nPoint it at a PDF, DOCX, PPTX, XLSX, HTML, Markdown, or an image and it returns well-structured text\nwith the reading order preserved. It recovers page layout, reconstructs tables, reads embedded and\nscanned text with OCR, and classifies pictures, so the output is faithful enough to feed a\nretrieval-augmented-generation pipeline or any downstream text process.\n\nWhat you get on Cloudron:\n\n- A document-conversion API on one HTTP port, protected by an API key that is generated for you on\n  first install. Send it as the `X-Api-Key` header to the `/v1/convert/*` endpoints.\n- A demonstrator web UI at `/ui`, placed behind Cloudron single sign-on, for converting a document\n  in the browser without writing any code.\n- Interactive OpenAPI documentation at `/docs`.\n- The full default pipeline (layout analysis, TableFormer table structure, the EasyOCR and RapidOCR\n  engines, picture classification) with its models baked into the image, so the app works the moment\n  it finishes installing, with no first-boot download and no external model server.\n\nIt runs CPU-only, stores all state under its data volume so Cloudron backs it up, and ships with\nsensible, secure defaults. It pairs naturally with an embeddings server and a vector database to\nbuild a self-hosted \"ask questions about my own documents\" stack.\n\nDocling is open source under the MIT license. This package tracks the upstream docling-serve release\nand adapts only the runtime environment to Cloudron; it does not modify Docling itself.\n",
+        "changelog": "_2026-08-02_\nBump upstream to docling-serve 1.29.0 (15 commits since 1.25.0). No auth or entrypoint change;\nupstream removed the unused KFP engine settings (`DOCLING_SERVE_ENG_KFP_*`), which this package\nnever set. Adds the `<upstream>` tag to DESCRIPTION.md.\n",
+        "icon": "file://logo.png",
+        "version": "1.0.2",
+        "upstreamVersion": "1.29.0",
+        "healthCheckPath": "/health",
+        "httpPort": 5001,
+        "addons": {
+          "localstorage": {},
+          "proxyAuth": {
+            "path": "/ui"
+          }
+        },
+        "memoryLimit": 4294967296,
+        "configurePath": "/ui",
+        "optionalSso": true,
+        "postInstallMessage": "Docling Serve is installed and ready. The document-conversion pipeline and its models ship inside the\nimage, so there is no first-boot download to wait for.\n\nYour API key was generated on first run. To read it, open a Terminal for this app (the >_ button in\nthe Cloudron dashboard) and run:\n\ncat /app/data/.secrets/keys.env\n\nSend that key as the HTTP header  X-Api-Key: YOUR_KEY  on every call to the conversion API.\n\nConvert a document from the command line (replace YOUR_KEY and the file path):\n\ncurl -X POST https://APP_DOMAIN/v1/convert/file -H \"X-Api-Key: YOUR_KEY\" -F \"files=@/path/to/document.pdf\"\n\nThe response is JSON containing the converted Markdown.\n\nThe browser surfaces, both behind your Cloudron login:\n\n- /ui   a demonstrator interface for converting a document by hand. The \"Open\" button in the\n  dashboard goes here.\n- /docs  the interactive OpenAPI documentation for every endpoint.\n\nNotes:\n\n- The conversion API is open at the network level and protected by the key, so scripts and other apps\n  can reach it without a Cloudron login. The /ui and /docs pages require your Cloudron login.\n- All state (the key, the model cache, conversion scratch) lives under /app/data and is included in\n  Cloudron backups.\n- Document conversion, especially OCR on scanned pages, is memory and CPU intensive. If large jobs\n  fail, raise this app's memory limit in the dashboard (Resources) and try again.\n- Tesseract, EasyOCR and RapidOCR are all available as OCR engines; EasyOCR is the default.\n",
+        "checklist": {
+          "apikey": {
+            "message": "Get your API key: open a Terminal for this app (the `>_` button) and run `cat /app/data/.secrets/keys.env`. Send it as the header `X-Api-Key: <key>` to the `/v1/convert/*` endpoints."
+          },
+          "ui": {
+            "message": "Open the demonstrator UI at `/ui` (behind Cloudron login) to convert a document in the browser. The OpenAPI docs are at `/docs`."
+          }
+        },
+        "tags": [
+          "ai",
+          "documents",
+          "ocr",
+          "rag",
+          "markdown"
+        ],
+        "mediaLinks": [
+          "https://raw.githubusercontent.com/OrcVole/docling-cloudron/main/logo.png"
+        ],
+        "website": "https://github.com/OrcVole/docling-cloudron",
+        "documentationUrl": "https://github.com/OrcVole/docling-cloudron",
+        "contactEmail": "OrcVole@users.noreply.github.com",
+        "packagerName": "OrcVole",
+        "packagerUrl": "https://github.com/OrcVole/docling-cloudron",
+        "manifestVersion": 2,
+        "minBoxVersion": "9.1.0",
+        "iconUrl": "https://raw.githubusercontent.com/OrcVole/docling-cloudron/main/logo.png",
+        "dockerImage": "ghcr.io/orcvole/docling-cloudron@sha256:93e05a437f5eaa3e494ec51abdc190a9f1fb8035f8bcfb3d89c4c2668a1bc4a0"
+      },
+      "creationDate": "Sun, 02 Aug 2026 18:39:53 GMT",
+      "ts": 1785695993000,
+      "publishState": "published"
+    },
+    "1.0.3": {
+      "manifest": {
+        "id": "io.github.orcvole.docling",
+        "title": "Docling Serve",
+        "author": "OrcVole",
+        "tagline": "Convert documents to clean Markdown and JSON (Docling)",
+        "description": "<upstream>1.29.0</upstream>\n\nDocling Serve converts documents into clean, structured Markdown and JSON through an HTTP API. It is\nthe API server for Docling, the open document-conversion toolkit, packaged here for Cloudron.\n\nPoint it at a PDF, DOCX, PPTX, XLSX, HTML, Markdown, or an image and it returns well-structured text\nwith the reading order preserved. It recovers page layout, reconstructs tables, reads embedded and\nscanned text with OCR, and classifies pictures, so the output is faithful enough to feed a\nretrieval-augmented-generation pipeline or any downstream text process.\n\nWhat you get on Cloudron:\n\n- A document-conversion API on one HTTP port, protected by an API key that is generated for you on\n  first install. Send it as the `X-Api-Key` header to the `/v1/convert/*` endpoints.\n- A demonstrator web UI at `/ui`, placed behind Cloudron single sign-on, for converting a document\n  in the browser without writing any code.\n- Interactive OpenAPI documentation at `/docs`.\n- The full default pipeline (layout analysis, TableFormer table structure, the EasyOCR and RapidOCR\n  engines, picture classification) with its models baked into the image, so the app works the moment\n  it finishes installing, with no first-boot download and no external model server.\n\nIt runs CPU-only, stores all state under its data volume so Cloudron backs it up, and ships with\nsensible, secure defaults. It pairs naturally with an embeddings server and a vector database to\nbuild a self-hosted \"ask questions about my own documents\" stack.\n\nDocling is open source under the MIT license. This package tracks the upstream docling-serve release\nand adapts only the runtime environment to Cloudron; it does not modify Docling itself.\n",
+        "changelog": "[1.0.3]\n_2026-08-07_\n\n* Update docling-serve 1.29.0 -> 1.30.0 (upstream release 2026-08-07)\n* Upstream: Docling v2.118.0 (new backends, heading-hierarchy options and fixes),\n  docling-jobkit v3.3.0 (new connectors); UI exposes PDF heading-level inference\n* No packaging changes: proxyAuth on /ui, keyed convert API and key handling unchanged;\n  transformers constraint byte-identical between releases\n",
+        "icon": "file://logo.png",
+        "version": "1.0.3",
+        "upstreamVersion": "1.30.0",
+        "healthCheckPath": "/health",
+        "httpPort": 5001,
+        "addons": {
+          "localstorage": {},
+          "proxyAuth": {
+            "path": "/ui"
+          }
+        },
+        "memoryLimit": 4294967296,
+        "configurePath": "/ui",
+        "optionalSso": true,
+        "postInstallMessage": "Docling Serve is installed and ready. The document-conversion pipeline and its models ship inside the\nimage, so there is no first-boot download to wait for.\n\nYour API key was generated on first run. To read it, open a Terminal for this app (the >_ button in\nthe Cloudron dashboard) and run:\n\ncat /app/data/.secrets/keys.env\n\nSend that key as the HTTP header  X-Api-Key: YOUR_KEY  on every call to the conversion API.\n\nConvert a document from the command line (replace YOUR_KEY and the file path):\n\ncurl -X POST https://APP_DOMAIN/v1/convert/file -H \"X-Api-Key: YOUR_KEY\" -F \"files=@/path/to/document.pdf\"\n\nThe response is JSON containing the converted Markdown.\n\nThe browser surfaces, both behind your Cloudron login:\n\n- /ui   a demonstrator interface for converting a document by hand. The \"Open\" button in the\n  dashboard goes here.\n- /docs  the interactive OpenAPI documentation for every endpoint.\n\nNotes:\n\n- The conversion API is open at the network level and protected by the key, so scripts and other apps\n  can reach it without a Cloudron login. The /ui and /docs pages require your Cloudron login.\n- All state (the key, the model cache, conversion scratch) lives under /app/data and is included in\n  Cloudron backups.\n- Document conversion, especially OCR on scanned pages, is memory and CPU intensive. If large jobs\n  fail, raise this app's memory limit in the dashboard (Resources) and try again.\n- Tesseract, EasyOCR and RapidOCR are all available as OCR engines; EasyOCR is the default.\n",
+        "checklist": {
+          "apikey": {
+            "message": "Get your API key: open a Terminal for this app (the `>_` button) and run `cat /app/data/.secrets/keys.env`. Send it as the header `X-Api-Key: <key>` to the `/v1/convert/*` endpoints."
+          },
+          "ui": {
+            "message": "Open the demonstrator UI at `/ui` (behind Cloudron login) to convert a document in the browser. The OpenAPI docs are at `/docs`."
+          }
+        },
+        "tags": [
+          "ai",
+          "documents",
+          "ocr",
+          "rag",
+          "markdown"
+        ],
+        "mediaLinks": [
+          "https://raw.githubusercontent.com/OrcVole/docling-cloudron/main/logo.png"
+        ],
+        "website": "https://github.com/OrcVole/docling-cloudron",
+        "documentationUrl": "https://github.com/OrcVole/docling-cloudron",
+        "contactEmail": "OrcVole@users.noreply.github.com",
+        "packagerName": "OrcVole",
+        "packagerUrl": "https://github.com/OrcVole/docling-cloudron",
+        "manifestVersion": 2,
+        "minBoxVersion": "9.1.0",
+        "iconUrl": "https://raw.githubusercontent.com/OrcVole/docling-cloudron/main/logo.png",
+        "dockerImage": "ghcr.io/orcvole/docling-cloudron@sha256:5005c292aed27d86c2008f70529bf76b51c98fb6b3f9f26fcf139eff13b126e3"
+      },
+      "creationDate": "Fri, 07 Aug 2026 16:55:01 GMT",
+      "ts": 1786121701895,
+      "publishState": "published"
     }
+  }
 }
