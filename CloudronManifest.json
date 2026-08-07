@@ -6,8 +6,8 @@
   "description": "file://DESCRIPTION.md",
   "changelog": "file://CHANGELOG.md",
   "icon": "file://logo.png",
-  "version": "1.0.2",
-  "upstreamVersion": "1.29.0",
+  "version": "1.0.3",
+  "upstreamVersion": "1.30.0",
   "healthCheckPath": "/health",
   "httpPort": 5001,
   "addons": {
@@ -46,5 +46,5 @@
   "manifestVersion": 2,
   "minBoxVersion": "9.1.0",
   "iconUrl": "https://raw.githubusercontent.com/OrcVole/docling-cloudron/main/logo.png",
-  "dockerImage": "ghcr.io/orcvole/docling-cloudron@sha256:93e05a437f5eaa3e494ec51abdc190a9f1fb8035f8bcfb3d89c4c2668a1bc4a0"
+  "dockerImage": "ghcr.io/orcvole/docling-cloudron@sha256:5005c292aed27d86c2008f70529bf76b51c98fb6b3f9f26fcf139eff13b126e3"
 }
