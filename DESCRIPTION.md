@@ -1,4 +1,4 @@
-<upstream>1.29.0</upstream>
+`<upstream>`1.29.0</upstream>
 
 Docling Serve converts documents into clean, structured Markdown and JSON through an HTTP API. It is
 the API server for Docling, the open document-conversion toolkit, packaged here for Cloudron.

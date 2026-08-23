@@ -5,23 +5,23 @@ repository's own semver and moves independently of the upstream docling-serve ve
 recorded in `upstreamVersion` in the manifest.
 
 [1.0.3]
-_2026-08-07_
+*2026-08-07*
 
-* Update docling-serve 1.29.0 -> 1.30.0 (upstream release 2026-08-07)
-* Upstream: Docling v2.118.0 (new backends, heading-hierarchy options and fixes),
+- Update docling-serve 1.29.0 -> 1.30.0 (upstream release 2026-08-07)
+- Upstream: Docling v2.118.0 (new backends, heading-hierarchy options and fixes),
   docling-jobkit v3.3.0 (new connectors); UI exposes PDF heading-level inference
-* No packaging changes: proxyAuth on /ui, keyed convert API and key handling unchanged;
+- No packaging changes: proxyAuth on /ui, keyed convert API and key handling unchanged;
   transformers constraint byte-identical between releases
 
 [1.0.2]
-_2026-08-02_
+*2026-08-02*
 
 Bump upstream to docling-serve 1.29.0 (15 commits since 1.25.0). No auth or entrypoint change;
 upstream removed the unused KFP engine settings (`DOCLING_SERVE_ENG_KFP_*`), which this package
 never set. Adds the `<upstream>` tag to DESCRIPTION.md.
 
 [1.0.1]
-_2026-06-26_
+*2026-06-26*
 
 First published release. Hardening and a smaller image; no behaviour or topology change.
 
@@ -39,7 +39,7 @@ First published release. Hardening and a smaller image; no behaviour or topology
   survive, and the auth topology is intact afterwards).
 
 [1.0.0]
-_2026-06-26_
+*2026-06-26*
 
 Initial package. Packages docling-serve 1.25.0 for Cloudron. Built and deployed to the target box;
 not published.

@@ -7,7 +7,7 @@ relitigate them and do not regress conformance.
 If you are an AI agent: treat the rules in "Golden rules" as hard constraints. When a request
 conflicts with them, stop and surface the conflict rather than working around it.
 
-This repository packages **Docling Serve** (https://github.com/docling-project/docling-serve, MIT, the
+This repository packages **Docling Serve** (<https://github.com/docling-project/docling-serve>, MIT, the
 HTTP API server for Docling, an open document-conversion toolkit) as a **Cloudron-conformant
 application**. The goals, in order: (1) it runs cleanly and securely on Cloudron, (2) the repository
 is public so others can use it, and (3) it is written to a standard where the Cloudron team could
@@ -15,8 +15,8 @@ adopt it as an official application.
 
 It is the document-ingestion tier of a self-hosted RAG stack: Docling parses documents into clean
 Markdown/JSON, an embeddings server turns the text into vectors, and a vector database stores and
-searches them. The companions are the TEI package (https://github.com/OrcVole/tei-cloudron) and the
-Qdrant package (https://github.com/OrcVole/qdrant-cloudron). See docs/INTEGRATIONS.md.
+searches them. The companions are the TEI package (<https://github.com/OrcVole/tei-cloudron>) and the
+Qdrant package (<https://github.com/OrcVole/qdrant-cloudron>). See docs/INTEGRATIONS.md.
 
 ---
 
