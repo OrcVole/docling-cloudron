@@ -1,3 +1,10 @@
+[1.0.4]
+
+- Update docling-serve 1.30.0 -> 1.32.0
+- Upstream: invalid options on multipart endpoints now return 422 instead of 500, which may break clients that key off the 500 status
+- Upstream: routine features and fixes across two releases
+- No packaging changes: auth topology, workspace layout and secrets handling unchanged; base and built images digest-pinned
+
 # Changelog
 
 All notable changes to this Cloudron package are documented here. The package version is this
