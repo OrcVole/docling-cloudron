@@ -1,4 +1,14 @@
-[1.0.4]
+[1.0.5]
+
+- Upstream docling-serve 1.32.0 to 1.35.0 (three releases merged)
+- S3 region support for storage coordinates, form model fix, UI OCR selection preservation
+- Ray application-level metrics support; notifier task cleanup
+- Chart extraction runtimes, RQ queue waiting time via OTLP, multi-queue drain in priority order
+- New `enable_api_docs` toggle and `/metrics` endpoint with Prometheus export
+- Removal of deprecated openapi-3 endpoint (upstream deprecation cleanup)
+- Five new settings added: enable_api_docs, allow_custom_chart_extraction_config, artifact_storage_region, eng_ray_generate_metrics, eng_ray_metrics_port; all default to existing-compatible values
+- No breaking changes, no migration required, no packaging changes
+
 
 - Update docling-serve 1.30.0 -> 1.32.0
 - Upstream: invalid options on multipart endpoints now return 422 instead of 500, which may break clients that key off the 500 status
