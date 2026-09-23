@@ -16,7 +16,7 @@
 #     into its layers).
 
 # ===== Stage 1: builder =================================================================
-FROM cloudron/base:5.0.0@sha256:04fd70dbd8ad6149c19de39e35718e024417c3e01dc9c6637eaf4a41ec4e596c AS builder
+FROM cloudron/base:5.1.0@sha256:1c0666c9abe9e2090d33686826d4e97769b799124573118d41e0d7485135748e AS builder
 
 ARG DOCLING_SERVE_VERSION=1.35.0
 ENV DOCLING_SERVE_VERSION=${DOCLING_SERVE_VERSION}
@@ -68,7 +68,7 @@ RUN ${VENV}/bin/docling-tools models download -o ${DOCLING_SERVE_ARTIFACTS_PATH}
     && chmod -R a+rX ${DOCLING_SERVE_ARTIFACTS_PATH}
 
 # ===== Stage 2: runtime =================================================================
-FROM cloudron/base:5.0.0@sha256:04fd70dbd8ad6149c19de39e35718e024417c3e01dc9c6637eaf4a41ec4e596c
+FROM cloudron/base:5.1.0@sha256:1c0666c9abe9e2090d33686826d4e97769b799124573118d41e0d7485135748e
 
 ARG DOCLING_SERVE_VERSION=1.35.0
 ENV DOCLING_SERVE_VERSION=${DOCLING_SERVE_VERSION}

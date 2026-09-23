@@ -6,15 +6,18 @@ recorded in `upstreamVersion` in the manifest.
 
 [1.0.5]
 
-- Upstream docling-serve 1.32.0 to 1.35.0 (three releases merged)
-- S3 region support for storage coordinates, form model fix, UI OCR selection preservation
-- Ray application-level metrics support; notifier task cleanup
-- Chart extraction runtimes, RQ queue waiting time via OTLP, multi-queue drain in priority order
-- New `enable_api_docs` toggle and `/metrics` endpoint with Prometheus export
-- Upstream removed the deprecated openapi-3 endpoint: a client still calling it now gets a 404
-- Five new settings added: enable_api_docs, allow_custom_chart_extraction_config, artifact_storage_region, eng_ray_generate_metrics, eng_ray_metrics_port; all default to existing-compatible values
-- No migration required, no packaging changes
-- Store listing now shows a screenshot of the Docling Serve UI instead of the app logo
+- Upstream docling-serve 1.32.0 to 1.35.0 (three releases: 1.33.0, 1.34.0, 1.35.0).
+- A corrected form model improves table detection in PDFs.
+- The web interface keeps your OCR engine choice when you move between pages.
+- S3 artifact storage gains a region setting.
+- New optional endpoints: the OpenAPI schema and Swagger/Redoc docs (off unless `enable_api_docs` is
+  set) and Prometheus metrics at `/metrics`.
+- Five new settings, all with safe defaults: `enable_api_docs`,
+  `allow_custom_chart_extraction_config`, `artifact_storage_region`, `eng_ray_generate_metrics`,
+  `eng_ray_metrics_port`.
+- Upstream removed the old openapi-3 endpoint; this package never used it, so nothing changes here.
+- Base image cloudron/base 5.0.0 to 5.1.0: the Ubuntu 24.04.4 point release, with its OS security
+  updates. Same Ubuntu 24.04 release and glibc 2.39.
 
 [1.0.4]
 
