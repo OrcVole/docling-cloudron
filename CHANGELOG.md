@@ -1,3 +1,9 @@
+# Changelog
+
+All notable changes to this Cloudron package are documented here. The package version is this
+repository's own semver and moves independently of the upstream docling-serve version, which is
+recorded in `upstreamVersion` in the manifest.
+
 [1.0.5]
 
 - Upstream docling-serve 1.32.0 to 1.35.0 (three releases merged)
@@ -5,21 +11,17 @@
 - Ray application-level metrics support; notifier task cleanup
 - Chart extraction runtimes, RQ queue waiting time via OTLP, multi-queue drain in priority order
 - New `enable_api_docs` toggle and `/metrics` endpoint with Prometheus export
-- Removal of deprecated openapi-3 endpoint (upstream deprecation cleanup)
+- Upstream removed the deprecated openapi-3 endpoint: a client still calling it now gets a 404
 - Five new settings added: enable_api_docs, allow_custom_chart_extraction_config, artifact_storage_region, eng_ray_generate_metrics, eng_ray_metrics_port; all default to existing-compatible values
-- No breaking changes, no migration required, no packaging changes
+- No migration required, no packaging changes
+- Store listing now shows a screenshot of the Docling Serve UI instead of the app logo
 
+[1.0.4]
 
 - Update docling-serve 1.30.0 -> 1.32.0
 - Upstream: invalid options on multipart endpoints now return 422 instead of 500, which may break clients that key off the 500 status
 - Upstream: routine features and fixes across two releases
 - No packaging changes: auth topology, workspace layout and secrets handling unchanged; base and built images digest-pinned
-
-# Changelog
-
-All notable changes to this Cloudron package are documented here. The package version is this
-repository's own semver and moves independently of the upstream docling-serve version, which is
-recorded in `upstreamVersion` in the manifest.
 
 [1.0.3]
 *2026-08-07*
