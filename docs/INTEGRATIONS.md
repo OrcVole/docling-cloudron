@@ -6,7 +6,7 @@ placeholders (`*.example.com`); use your own.
 
 ## The pipeline
 
-```
+```text
 documents (PDF, DOCX, PPTX, XLSX, HTML, images)
    -> Docling Serve   POST /v1/convert/*      clean Markdown / JSON, layout + tables + OCR
    -> chunk the Markdown                       split into passages
