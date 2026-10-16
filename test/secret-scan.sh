@@ -218,7 +218,7 @@ else
   fi
 
   # --- the inert /etc/ssh host keys: whitelist BY EXACT PATH, with a VISIBLE COUNT ---
-  # cloudron/base 5.1.0 ships no SSH host keys (only ssh_config and ssh_config.d). No sshd runs in
+  # cloudron/base 6.0.0 ships no SSH host keys (only ssh_config and ssh_config.d). No sshd runs in
   # the app and the Dockerfile never touches ssh, so there are no keys to pin. A count check still
   # fires if any appear unexpectedly. Re-verify whenever the base image digest changes.
   declare -A PINNED_SSH=()

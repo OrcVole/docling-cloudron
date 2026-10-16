@@ -3,49 +3,61 @@
 # Unlike the TEI/Qdrant packages (a single upstream binary copied onto cloudron/base), docling-serve
 # is a full Python 3.12 ML application (torch, layout + TableFormer models, OCR engines). Rather than
 # copy a uv venv across distributions from the official CentOS-based image, this package installs the
-# pinned upstream release straight onto cloudron/base with uv, on the same Ubuntu 24.04 / Python 3.12
-# the app expects. The version is pinned by the DOCLING_SERVE_VERSION build argument; the manifest
+# pinned upstream release straight onto cloudron/base (6.0.0, Ubuntu 26.04) with uv, on the Python 3.12
+# the app expects. cloudron/base 6 carries Python 3.14 and no venv or pip, so uv installs its own
+# pinned CPython 3.12 under /app/code/python and the venv links to it; no future base bump can move
+# the interpreter (doctrine/base-6-migration.md step 5). The version is pinned by the
+# DOCLING_SERVE_VERSION build argument; the manifest
 # mirrors it in upstreamVersion. The pipeline models are baked into the image at build time so the
 # first boot needs no download (avoiding the health-grace-vs-download race the TEI package hit).
 #
-# Two stages, both on the same cloudron/base (so the venv is portable between them, see ADR 0001):
-#   - builder: install the dev toolchain, create the venv, install the pinned release, bake the
+# Three stages (a pinned uv, then two on the same cloudron/base so the venv is portable between them,
+# see ADR 0001):
+#   - uv: the pinned uv binary, which installs the interpreter as well as the packages.
+#   - builder: install the build libraries, create the venv, install the pinned release, bake the
 #     models. uv's multi-gigabyte download cache stays in this throwaway stage.
 #   - runtime: install only the runtime libraries and COPY the venv + models across. The image ships
 #     just the installed tree (about 2.5 GB lighter than a single-stage build that bakes the uv cache
 #     into its layers).
 
-# ===== Stage 1: builder =================================================================
-FROM cloudron/base:5.1.0@sha256:1c0666c9abe9e2090d33686826d4e97769b799124573118d41e0d7485135748e AS builder
+# ===== Stage 0: uv, pinned ==============================================================
+FROM ghcr.io/astral-sh/uv:0.13.1@sha256:4a1f3666816dafadd20ceb71eac9a7d56d7ef30279f7d64048519ab901ada336 AS uv
 
-ARG DOCLING_SERVE_VERSION=1.35.0
+# ===== Stage 1: builder =================================================================
+FROM docker.io/cloudron/base:6.0.0@sha256:9bed4c8fa880645f8e669041ee28febe941481d00e9445e3e5a5483cb541d09b AS builder
+
+ARG DOCLING_SERVE_VERSION=1.37.0
 ENV DOCLING_SERVE_VERSION=${DOCLING_SERVE_VERSION}
 
 # Build dependencies. The runtime libraries (tesseract, libGL, libgomp, libglib) are installed here
 # too because the model bake imports OpenCV; the runtime stage installs its own slimmer subset.
-# python3.12-dev and curl are build-only and are not carried into the runtime image.
+# No python3.12-dev: every dependency installs as a wheel (nothing compiles; tesserocr is not
+# installed), and uv's managed CPython ships its own headers should one ever be needed.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      python3.12 python3.12-venv python3.12-dev \
       tesseract-ocr tesseract-ocr-eng \
       libgl1 libglib2.0-0 libgomp1 \
-      ca-certificates curl \
+      ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-ENV VENV=/app/code/venv
+COPY --from=uv /uv /usr/local/bin/uv
+
+ENV VENV=/app/code/venv \
+    UV_PYTHON_INSTALL_DIR=/app/code/python \
+    UV_PYTHON_PREFERENCE=only-managed
 ENV PATH=${VENV}/bin:${PATH} \
-    PIP_NO_CACHE_DIR=1 \
     PYTHONUNBUFFERED=1
 
-# uv (installed into the venv) drives the dependency resolution of the large ML stack quickly and
-# deterministically.
-RUN python3.12 -m venv ${VENV} \
-    && ${VENV}/bin/pip install --no-cache-dir --upgrade pip uv
+# The interpreter is a pinned uv-managed CPython 3.12 under /app/code/python (the same minor the
+# package used on base 5). The venv's python is a symlink into it, so BOTH trees are copied to the
+# runtime stage below.
+RUN uv python install 3.12.15 \
+    && uv venv --python 3.12.15 ${VENV}
 
 # Install CPU-only torch FIRST, from the PyTorch CPU index. The plain PyPI torch wheel bundles the
 # CUDA runtime (multiple GB); pinning the CPU build here means the subsequent docling-serve install
 # finds torch already satisfied (CPU and CUDA wheels share the same version string) and does not pull
 # the CUDA build. This is what makes the image a true CPU package.
-RUN ${VENV}/bin/uv pip install --python ${VENV}/bin/python \
+RUN uv pip install --python ${VENV}/bin/python \
       --index-url https://download.pytorch.org/whl/cpu \
       torch torchvision
 
@@ -54,7 +66,7 @@ RUN ${VENV}/bin/uv pip install --python ${VENV}/bin/python \
 # is available via its CLI (system package above); the tesserocr Python binding is intentionally not
 # installed (it compiles against libtesseract and is not needed for rapidocr/easyocr or the Tesseract
 # CLI path).
-RUN ${VENV}/bin/uv pip install --python ${VENV}/bin/python \
+RUN uv pip install --python ${VENV}/bin/python \
       --extra-index-url https://download.pytorch.org/whl/cpu \
       --index-strategy unsafe-best-match \
       "docling-serve[ui,rapidocr,easyocr]==${DOCLING_SERVE_VERSION}"
@@ -68,15 +80,19 @@ RUN ${VENV}/bin/docling-tools models download -o ${DOCLING_SERVE_ARTIFACTS_PATH}
     && chmod -R a+rX ${DOCLING_SERVE_ARTIFACTS_PATH}
 
 # ===== Stage 2: runtime =================================================================
-FROM cloudron/base:5.1.0@sha256:1c0666c9abe9e2090d33686826d4e97769b799124573118d41e0d7485135748e
+FROM docker.io/cloudron/base:6.0.0@sha256:9bed4c8fa880645f8e669041ee28febe941481d00e9445e3e5a5483cb541d09b
 
-ARG DOCLING_SERVE_VERSION=1.35.0
+ARG DOCLING_SERVE_VERSION=1.37.0
 ENV DOCLING_SERVE_VERSION=${DOCLING_SERVE_VERSION}
 
-# Runtime libraries only (no -dev headers, no curl): the Python 3.12 interpreter the copied venv links
-# against, the Tesseract engine, and the OpenCV/OpenMP shared libraries the wheels dlopen.
+# Step 6b of base-6-migration.md (measured 2026-10-16): ldd over every *.so* in the venv, the managed
+# CPython and /usr/bin/tesseract on THIS stage leaves only torchvision's libtorch/libc10 names, which
+# torch supplies at import. No library base 5 carried incidentally is missing, so nothing is added
+# beyond the four packages below.
+# Runtime libraries only (no -dev headers, no curl): the Tesseract engine and the OpenCV/OpenMP
+# shared libraries the wheels dlopen. The Python interpreter is NOT an apt package any more: it is the
+# uv-managed CPython 3.12 copied below.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      python3.12 python3.12-venv \
       tesseract-ocr tesseract-ocr-eng \
       libgl1 libglib2.0-0 libgomp1 \
       ca-certificates \
@@ -87,20 +103,28 @@ ENV PATH=${VENV}/bin:${PATH} \
     PYTHONUNBUFFERED=1 \
     DOCLING_SERVE_ARTIFACTS_PATH=/app/code/models
 
-# Copy the built venv and the baked models from the builder. Both stages share the same cloudron/base
-# and the same /app/code/venv path, so the venv's interpreter symlinks and shebangs resolve unchanged.
-# Only the installed tree is copied; uv's download cache stays behind in the builder.
+# Copy the interpreter, the built venv and the baked models from the builder. Both stages share the same
+# cloudron/base and the same /app/code paths, so the venv's interpreter symlink (into /app/code/python)
+# and shebangs resolve unchanged. Only the installed tree is copied; uv's download cache stays behind
+# in the builder.
+COPY --from=builder /app/code/python /app/code/python
 COPY --from=builder /app/code/venv  /app/code/venv
 COPY --from=builder /app/code/models /app/code/models
 
 COPY start.sh /app/code/start.sh
 RUN chmod 0755 /app/code/start.sh
 
-# Runtime import + CLI gate on the assembled image: fail the build if the copied venv cannot import or
-# the CLI is broken. This does NOT run a real conversion (torch/opencv/tesseract are dlopen-heavy and
-# not exercised here), so the real gate is the runtime convert smoke in test/smoke.sh.
-RUN ${VENV}/bin/python -c "import docling, docling_serve, torch; from importlib.metadata import version; print('imports ok: docling-serve', version('docling-serve'), 'torch', torch.__version__)" \
-    && ${VENV}/bin/docling-serve --help >/dev/null
+# Runtime gate on the assembled image, through the exact interpreter start.sh execs (#291): fail the
+# build if the copied interpreter and venv cannot import the native modules (cv2, torch, onnxruntime),
+# the OCR engine modules (EasyOCR, the default, and RapidOCR), or convert a tiny generated PDF to
+# Markdown by text layer and by forced full-page OCR through each engine. This is what catches a
+# system library cloudron/base no longer carries (step 6b of base-6-migration.md). The runtime convert
+# smoke in test/smoke.sh remains the gate for the HTTP surface.
+COPY tools/image-gate.py /tmp/image-gate.py
+RUN HOME=/tmp /app/code/venv/bin/python /tmp/image-gate.py \
+    && /app/code/venv/bin/python -c "import docling, docling_serve; from importlib.metadata import version; print('imports ok: docling-serve', version('docling-serve'))" \
+    && /app/code/venv/bin/docling-serve --help >/dev/null \
+    && rm -f /tmp/image-gate.py
 
 LABEL org.opencontainers.image.title="docling-cloudron" \
       org.opencontainers.image.description="Docling Serve (document conversion API) packaged for Cloudron" \

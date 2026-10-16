@@ -18,7 +18,10 @@ up).
 ## Decision
 
 Install the pinned upstream release straight onto `cloudron/base` with uv. cloudron/base is Ubuntu
-24.04, which ships the same Python 3.12 the app expects, so manylinux wheels resolve cleanly. The
+24.04 (5.x) or 26.04 (6.x). 24.04 shipped the same Python 3.12 the app expects; 26.04 ships Python 3.14
+and no venv or pip, so since package 1.0.6 uv also installs a pinned CPython 3.12.15 under
+`/app/code/python`. The interpreter then travels with the venv, manylinux wheels resolve cleanly, and
+no future base bump can move it. The
 package does not patch docling; it installs `docling-serve==<pinned>` and adapts only the runtime
 environment.
 

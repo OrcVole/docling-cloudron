@@ -55,13 +55,13 @@ Qdrant package (<https://github.com/OrcVole/qdrant-cloudron>). See docs/INTEGRAT
 ## 3. Pinned versions and the build (the non-obvious part)
 
 **Canonical upstream version:** the `DOCLING_SERVE_VERSION` build argument in `Dockerfile` (currently
-`1.25.0`). The manifest mirrors it in `upstreamVersion`.
+`1.37.0`). The manifest mirrors it in `upstreamVersion`.
 
 Unlike the TEI/Qdrant packages (a single upstream binary copied onto cloudron/base), docling-serve is
 a full Python 3.12 ML application: torch, the layout and TableFormer models, and OCR engines. The
 official image is built on CentOS Stream 9; rather than copy a uv venv across distributions, this
-package installs the pinned release straight onto `cloudron/base` (Ubuntu 24.04, the same Python 3.12
-the app expects) with uv. See docs/decisions/0001-pip-install-on-base.md.
+package installs the pinned release straight onto `cloudron/base` 6.0.0 (Ubuntu 26.04) with uv, on a
+uv-managed CPython 3.12.15 kept under `/app/code/python` (the base carries Python 3.14 and no venv). See docs/decisions/0001-pip-install-on-base.md.
 
 Two things make the build correct:
 

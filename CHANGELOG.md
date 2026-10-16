@@ -4,6 +4,21 @@ All notable changes to this Cloudron package are documented here. The package ve
 repository's own semver and moves independently of the upstream docling-serve version, which is
 recorded in `upstreamVersion` in the manifest.
 
+[1.0.6]
+
+- Base image cloudron/base 5.1.0 to 6.0.0 (Ubuntu 26.04, glibc 2.43). The interpreter no longer comes
+  from the base, which now carries Python 3.14: the package ships its own pinned CPython 3.12.15
+  (managed by uv, kept under `/app/code/python`), the same 3.12 minor as before, so the machine
+  learning stack is unchanged.
+- Upstream docling-serve 1.35.0 to 1.37.0 (two releases: 1.36.0, 1.37.0). 1.36.0 adds visualisation
+  components and a rebuilt web interface that exposes the newer docling-serve features, and updates
+  dependencies. 1.37.0 updates dependencies, exposes new settings from docling-jobkit, fixes the
+  default code and formula preset so it points at a real Docling preset, and keeps custom OCR presets
+  selectable. No security fixes are listed in either release.
+- The image build now converts a small generated PDF to Markdown, by text layer and through both the
+  EasyOCR and RapidOCR engines, so a missing system library fails the build rather than a first
+  conversion.
+
 [1.0.5]
 
 - Upstream docling-serve 1.32.0 to 1.35.0 (three releases: 1.33.0, 1.34.0, 1.35.0).
