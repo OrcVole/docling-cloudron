@@ -4,6 +4,13 @@ All notable changes to this Cloudron package are documented here. The package ve
 repository's own semver and moves independently of the upstream docling-serve version, which is
 recorded in `upstreamVersion` in the manifest.
 
+[1.0.7]
+
+- Base image cloudron/base 6.0.0 to 6.0.1: Ubuntu security updates, including the removal of the
+  compromised eMudhra emSign ECC Root CA - G3 from the trusted certificates.
+- pip in the packaged CPython 3.12 raised from 26.2.1 to 26.2.2 or later, as the Cloudron security
+  advisory asks.
+
 [1.0.6]
 
 - Base image cloudron/base 5.1.0 to 6.0.0 (Ubuntu 26.04, glibc 2.43). The interpreter no longer comes

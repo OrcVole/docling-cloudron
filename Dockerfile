@@ -3,7 +3,7 @@
 # Unlike the TEI/Qdrant packages (a single upstream binary copied onto cloudron/base), docling-serve
 # is a full Python 3.12 ML application (torch, layout + TableFormer models, OCR engines). Rather than
 # copy a uv venv across distributions from the official CentOS-based image, this package installs the
-# pinned upstream release straight onto cloudron/base (6.0.0, Ubuntu 26.04) with uv, on the Python 3.12
+# pinned upstream release straight onto cloudron/base (6.0.1, Ubuntu 26.04) with uv, on the Python 3.12
 # the app expects. cloudron/base 6 carries Python 3.14 and no venv or pip, so uv installs its own
 # pinned CPython 3.12 under /app/code/python and the venv links to it; no future base bump can move
 # the interpreter (doctrine/base-6-migration.md step 5). The version is pinned by the
@@ -24,7 +24,7 @@
 FROM ghcr.io/astral-sh/uv:0.13.1@sha256:4a1f3666816dafadd20ceb71eac9a7d56d7ef30279f7d64048519ab901ada336 AS uv
 
 # ===== Stage 1: builder =================================================================
-FROM docker.io/cloudron/base:6.0.0@sha256:9bed4c8fa880645f8e669041ee28febe941481d00e9445e3e5a5483cb541d09b AS builder
+FROM docker.io/cloudron/base:6.0.1@sha256:7b1e729960c3ca312d26e886917ba89483241bba0219ff292858e10d9d5768ee AS builder
 
 ARG DOCLING_SERVE_VERSION=1.37.0
 ENV DOCLING_SERVE_VERSION=${DOCLING_SERVE_VERSION}
@@ -53,6 +53,13 @@ ENV PATH=${VENV}/bin:${PATH} \
 RUN uv python install 3.12.15 \
     && uv venv --python 3.12.15 ${VENV}
 
+# The managed CPython carries its own pip (26.2.1 at the time of writing). The Cloudron security
+# advisory of 2026-10-21 asks for pip 26.2.2 or later, so raise it in the interpreter itself (the venv
+# has no pip of its own; uv installs the packages). The build fails if the result is older.
+RUN PY="$(uv python find 3.12.15)" \
+    && "${PY}" -m pip install --no-cache-dir --break-system-packages 'pip>=26.2.2' \
+    && "${PY}" -c "import pip; from importlib.metadata import version; v=tuple(int(x) for x in version('pip').split('.')[:3]); assert v>=(26,2,2), v; print('pip', version('pip'))"
+
 # Install CPU-only torch FIRST, from the PyTorch CPU index. The plain PyPI torch wheel bundles the
 # CUDA runtime (multiple GB); pinning the CPU build here means the subsequent docling-serve install
 # finds torch already satisfied (CPU and CUDA wheels share the same version string) and does not pull
@@ -80,7 +87,7 @@ RUN ${VENV}/bin/docling-tools models download -o ${DOCLING_SERVE_ARTIFACTS_PATH}
     && chmod -R a+rX ${DOCLING_SERVE_ARTIFACTS_PATH}
 
 # ===== Stage 2: runtime =================================================================
-FROM docker.io/cloudron/base:6.0.0@sha256:9bed4c8fa880645f8e669041ee28febe941481d00e9445e3e5a5483cb541d09b
+FROM docker.io/cloudron/base:6.0.1@sha256:7b1e729960c3ca312d26e886917ba89483241bba0219ff292858e10d9d5768ee
 
 ARG DOCLING_SERVE_VERSION=1.37.0
 ENV DOCLING_SERVE_VERSION=${DOCLING_SERVE_VERSION}
